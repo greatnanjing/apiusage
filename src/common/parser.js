@@ -92,3 +92,52 @@ export function formatForDisplay(parsed) {
 
   return { balanceDisplay, status, balance, currency, extra: parsed.extra }
 }
+
+/**
+ * 解析智谱 Coding Plan 用量数据（与 web 版 parseZhipuCpData 一致）
+ *
+ * 接口返回的 data.limits 中，type 为 TOKENS_LIMIT 的条目：
+ *   unit === 3 -> 5 小时窗口用量（fiveHour）
+ *   unit === 6 -> 7 天窗口用量（weekly）
+ *
+ * @param {Object} json - 智谱 Coding Plan 接口的原始 JSON
+ * @returns {null | {fiveHour?: {pct, remaining}, weekly?: {pct, remaining}}}
+ */
+export function parseZhipuCpData(json) {
+  if (!json || !json.success || !json.data || !json.data.limits) return null
+
+  const limits = json.data.limits
+  const result = {}
+  for (let i = 0; i < limits.length; i++) {
+    const item = limits[i]
+    if (item.type !== 'TOKENS_LIMIT') continue
+    const pct = Number(item.percentage) || 0
+    let remaining = ''
+    if (item.nextResetTime) {
+      let resetMs = Number(item.nextResetTime)
+      if (resetMs < 1e12) resetMs *= 1000 // 秒 → 毫秒
+      remaining = formatRemaining(resetMs - Date.now())
+    }
+    if (item.unit === 3) {
+      result.fiveHour = { pct: pct, remaining: remaining }
+    } else if (item.unit === 6) {
+      result.weekly = { pct: pct, remaining: remaining }
+    }
+  }
+  return result
+}
+
+/**
+ * 将剩余毫秒数格式化为简短文案（与 web 版 formatRemaining 一致）
+ */
+export function formatRemaining(ms) {
+  if (ms <= 0) return '即将重置'
+  const minutes = Math.floor(ms / 1000 / 60)
+  let hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+  hours = hours % 24
+  const mins = minutes % 60
+  if (days > 0) return days + 'd' + (hours > 0 ? hours + 'h' : '')
+  if (hours > 0) return hours + 'h' + (mins > 0 ? mins + 'm' : '')
+  return mins + 'm'
+}

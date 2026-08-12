@@ -30,7 +30,7 @@
     <div class="empty-state" show="{{ activeCount === 0 }}">
       <text class="empty-icon">📊</text>
       <text class="empty-title">还没有配置供应商</text>
-      <text class="empty-hint">点击「+ 添加」选择供应商</text>
+      <text class="empty-hint">点击「+ 添加」选择供应商并填入 API KEY</text>
       <text class="empty-hint">或「📋」导入 JSON 配置</text>
     </div>
 
@@ -45,6 +45,15 @@
           <text class="card-balance">{{ card.balanceText }}</text>
         </div>
         <div class="card-detail" show="{{ card.expanded }}">
+          <!-- 智谱 Coding Plan 用量（与 web 版一致） -->
+          <div class="detail-row" show="{{ card.cp5Show }}">
+            <text class="detail-label">Coding Plan 5h</text>
+            <text class="detail-value {{ card.cp5Cls }}">{{ card.cp5Text }}</text>
+          </div>
+          <div class="detail-row" show="{{ card.cp7Show }}">
+            <text class="detail-label">Coding Plan 7d</text>
+            <text class="detail-value {{ card.cp7Cls }}">{{ card.cp7Text }}</text>
+          </div>
           <div class="detail-row" for="row in card.extraRows">
             <text class="detail-label">{{ row.label }}</text>
             <text class="detail-value">{{ row.value }}</text>
@@ -96,7 +105,7 @@
           <div class="btn-close" @click="showImportPanel = false"><text class="close-text">✕</text></div>
         </div>
         <text class="hint">修改 apiKey 后粘贴完整的 JSON</text>
-        <div class="btn-tmpl" @click="loadTemplate"><text class="btn-tmpl-text">加载预置模板</text></div>
+        <div class="btn-tmpl" @click="loadTemplate"><text class="btn-tmpl-text">📋 加载预置模板</text></div>
         <textarea class="import-textarea" onchange="onImportTextChange">{{ importText }}</textarea>
         <text class="error-text" show="{{ importError }}">{{ importError }}</text>
         <div class="modal-footer">
@@ -111,7 +120,7 @@
       <div class="modal-content">
         <text class="modal-title">编辑 {{ editName }}</text>
         <input class="modal-input" placeholder="API KEY" value="{{ editKey }}" onchange="onEditKeyChg"></input>
-        <input class="modal-input" placeholder="API Secret" show="{{ editHasSecret }}"
+        <input class="modal-input" placeholder="API Secret（仅讯飞需要）" show="{{ editHasSecret }}"
                value="{{ editSecret }}" onchange="onEditSecretChg"></input>
         <div class="modal-footer">
           <div class="btn-cancel" @click="showEditPanel = false"><text class="btn-text-cancel">取消</text></div>
@@ -124,8 +133,8 @@
 
 <script>
 import { PROVIDER_TEMPLATES, generateImportTemplate } from '../../common/providers.js'
-import { queryAllBalances, queryBalance } from '../../common/api.js'
-import { parseResponse, formatForDisplay } from '../../common/parser.js'
+import { queryAllBalances, queryBalance, fetchZhipuCodingPlan } from '../../common/api.js'
+import { parseResponse, formatForDisplay, parseZhipuCpData } from '../../common/parser.js'
 import { loadProviders, saveProviders, loadSnapshot, saveSnapshot } from '../../common/storage.js'
 import prompt from '@system.prompt'
 
@@ -229,6 +238,7 @@ export default {
             balanceText: r.message || '失败',
             expanded: false,
             extraRows: [],
+            codingPlan: null,
             lastUpdate: Date.now()
           })
         }
@@ -243,13 +253,28 @@ export default {
             balanceText: '—',
             expanded: false,
             extraRows: [],
+            codingPlan: null,
             lastUpdate: 0
           })
         }
       }
-      self._renderCards(display)
-      saveSnapshot(display)
-      self.refreshing = false
+      // 为智谱并行查询 Coding Plan（与 web 版 refreshAll 一致）
+      var cpPromises = []
+      for (var n = 0; n < display.length; n++) {
+        if (display[n].id === 'zhipu') {
+          cpPromises.push(self._queryZhipuCodingPlan(display[n]))
+        }
+      }
+      var finish = function () {
+        self._renderCards(display)
+        saveSnapshot(display)
+        self.refreshing = false
+      }
+      if (cpPromises.length) {
+        Promise.all(cpPromises).then(finish, finish)
+      } else {
+        finish()
+      }
     }).catch(function () {
       self.refreshing = false
     })
@@ -267,6 +292,16 @@ export default {
           break
         }
       }
+      saveSnapshot(self.cards)
+      // 智谱额外查询 Coding Plan（与 web 版 refreshOne 一致）
+      if (id === 'zhipu') {
+        self._queryZhipuCodingPlan(card).then(function () {
+          self.cards = self.cards.slice()
+          saveSnapshot(self.cards)
+        })
+      }
+    }).catch(function (e) {
+      prompt.showToast({ message: '刷新失败: ' + ((e && e.message) || '请求出错') })
     })
   },
 
@@ -293,6 +328,20 @@ export default {
   },
 
   deleteOne: function (id) {
+    var self = this
+    // 删除前确认（与 web 版 confirm 一致）
+    prompt.showDialog({
+      message: '确定移除该供应商？',
+      buttons: [
+        { text: '取消', color: '#666666' },
+        { text: '确定', color: '#e53935' }
+      ]
+    }).then(function (res) {
+      if (res && res.index === 1) self._doDelete(id)
+    }).catch(function () {})
+  },
+
+  _doDelete: function (id) {
     var prov = this._findProv(id)
     if (prov) {
       prov.apiKey = ''
@@ -304,6 +353,7 @@ export default {
       if (this.cards[i].id !== id) cards.push(this.cards[i])
     }
     this.cards = cards
+    saveSnapshot(this.cards)
   },
 
   // ============ 添加供应商 ============
@@ -509,7 +559,7 @@ export default {
 
   _buildCard: function (id, rawData) {
     var prov = this._findProv(id)
-    if (!prov) return { id: id, name: id, status: 'unknown', statusLabel: '未知', balanceText: '—', expanded: false, extraRows: [], lastUpdate: 0 }
+    if (!prov) return { id: id, name: id, status: 'unknown', statusLabel: '未知', balanceText: '—', expanded: false, extraRows: [], codingPlan: null, lastUpdate: 0 }
     var parsed = parseResponse(rawData, prov.responseMapping)
     var fmt = formatForDisplay(parsed)
     var rows = []
@@ -522,7 +572,15 @@ export default {
         rows.push({ label: LABEL_MAP[key] || key, value: String(val) })
       }
     }
-    return {
+    // 保留已有的 codingPlan 数据（避免余额查询结果覆盖 Coding Plan 数据，与 web 版 buildCard 一致）
+    var existingCp = null
+    for (var n = 0; n < this.cards.length; n++) {
+      if (this.cards[n].id === id) {
+        existingCp = this.cards[n].codingPlan
+        break
+      }
+    }
+    var card = {
       id: id,
       name: prov.name,
       status: fmt.status,
@@ -530,7 +588,48 @@ export default {
       balanceText: fmt.balanceDisplay,
       expanded: false,
       extraRows: rows,
+      codingPlan: existingCp,
       lastUpdate: Date.now()
+    }
+    this._applyCodingPlanFields(card)
+    return card
+  },
+
+  // ============ 智谱 Coding Plan ============
+
+  _queryZhipuCodingPlan: function (card) {
+    var self = this
+    var p = this._findProv('zhipu')
+    if (!p) return Promise.resolve()
+    return fetchZhipuCodingPlan(p.apiKey).then(function (data) {
+      card.codingPlan = parseZhipuCpData(data)
+      self._applyCodingPlanFields(card)
+    }).catch(function () {
+      // Coding Plan 查询失败不影响余额显示（与 web 版一致）
+      card.codingPlan = null
+      self._applyCodingPlanFields(card)
+    })
+  },
+
+  // 根据 codingPlan 计算卡片展示字段（5h/7d 用量百分比及颜色档位）
+  _applyCodingPlanFields: function (card) {
+    card.cp5Show = false
+    card.cp5Text = ''
+    card.cp5Cls = ''
+    card.cp7Show = false
+    card.cp7Text = ''
+    card.cp7Cls = ''
+    var cp = card.codingPlan
+    if (!cp) return
+    if (cp.fiveHour) {
+      card.cp5Show = true
+      card.cp5Text = Math.round(cp.fiveHour.pct) + '%'
+      card.cp5Cls = cp.fiveHour.pct <= 50 ? 'cp-ok' : (cp.fiveHour.pct <= 80 ? 'cp-warn' : 'cp-high')
+    }
+    if (cp.weekly) {
+      card.cp7Show = true
+      card.cp7Text = Math.round(cp.weekly.pct) + '%'
+      card.cp7Cls = cp.weekly.pct <= 50 ? 'cp-ok' : (cp.weekly.pct <= 80 ? 'cp-warn' : 'cp-high')
     }
   },
 
@@ -540,6 +639,7 @@ export default {
         cards[i].statusLabel = STATUS_MAP[cards[i].status] || '未知'
       }
       if (!cards[i].extraRows) cards[i].extraRows = []
+      this._applyCodingPlanFields(cards[i])
     }
     this.cards = cards
   }
@@ -599,6 +699,10 @@ export default {
 .detail-row { flex-direction: row; justify-content: space-between; padding: 5px 0; }
 .detail-label { font-size: 15px; color: #888; }
 .detail-value { font-size: 15px; color: #333; }
+/* Coding Plan 用量颜色档位（与 web 版 cp-item 一致） */
+.cp-ok { color: #4caf50; }
+.cp-warn { color: #ff9800; }
+.cp-high { color: #f44336; }
 .card-actions { flex-direction: row; margin-top: 10px; }
 .action-btn { padding: 6px 14px; background-color: #f0f0f0; border-radius: 4px; margin-right: 8px; }
 .action-del { background-color: #fce4ec; }

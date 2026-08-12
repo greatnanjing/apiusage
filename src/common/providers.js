@@ -103,12 +103,7 @@ export const PROVIDER_TEMPLATES = [
     apiSecret: '',
     endpoint: 'https://spark-api-open.xf-yun.com/v1/user/balance',
     method: 'GET',
-    authType: 'hmac',
-    hmacConfig: {
-      headerName: 'Authorization',
-      algorithm: 'hmac-sha256',
-      format: 'api_key="{apiKey}",signature="{signature}"'
-    },
+    authType: 'bearer',
     responseMapping: {
       balancePath: 'data.balance',
       usedPath: 'data.used',
