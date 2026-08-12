@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="API用量">
 <meta name="theme-color" content="#4a90d9">
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%234a90d9'/><text x='16' y='23' text-anchor='middle' font-size='18' fill='white'>📊</text></svg>">
 <title>API 用量</title>
 <style>
@@ -205,13 +205,33 @@ var providers = []
 var cards = []
 var editProvId = ''
 
-// ==================== Proxy API ====================
+// ==================== API 请求 ====================
+// proxyUsable=true 时走本地代理（node server.js）；
+// 静态部署（如 GitHub Pages）时自动切换为浏览器直连
+// （DeepSeek/Kimi/硅基/阶跃/智谱等接口已支持 CORS 直连）
+var proxyUsable = false
+
+// 探测：server.js 对无参数的 /api/proxy 返回 400；静态托管返回 404 或网络错误
+function detectProxy() {
+  return fetch('/api/proxy').then(function(r) {
+    proxyUsable = (r.status === 400)
+  }).catch(function() {
+    proxyUsable = false
+  })
+}
+
 function callApi(prov) {
   var authVal = 'Bearer ' + (prov.apiKey || '')
-  return fetch('/api/proxy?url=' + encodeURIComponent(prov.endpoint), {
-    method: prov.method || 'GET',
-    headers: { 'X-Auth': authVal }
-  }).then(function(r) {
+  var req = proxyUsable
+    ? fetch('/api/proxy?url=' + encodeURIComponent(prov.endpoint), {
+        method: prov.method || 'GET',
+        headers: { 'X-Auth': authVal }
+      })
+    : fetch(prov.endpoint, {
+        method: prov.method || 'GET',
+        headers: { 'Authorization': authVal, 'Accept': 'application/json' }
+      })
+  return req.then(function(r) {
     if (!r.ok) throw new Error('HTTP ' + r.status)
     return r.json()
   })
@@ -427,13 +447,18 @@ function queryZhipuCodingPlan(card) {
   var p = findProv('zhipu')
   if (!p) return Promise.resolve()
 
-  return fetch('/api/proxy?url=' + encodeURIComponent('https://open.bigmodel.cn/api/monitor/usage/quota/limit'), {
-    method: 'GET',
-    headers: {
-      'X-Auth-Raw': p.apiKey,
-      'X-Accept-Lang': 'en-US,en'
-    }
-  }).then(function(r) {
+  var CP_URL = 'https://open.bigmodel.cn/api/monitor/usage/quota/limit'
+  // 直连模式下浏览器禁止设置 Accept-Language 头，但解析字段与语言无关，不受影响
+  var req = proxyUsable
+    ? fetch('/api/proxy?url=' + encodeURIComponent(CP_URL), {
+        method: 'GET',
+        headers: { 'X-Auth-Raw': p.apiKey, 'X-Accept-Lang': 'en-US,en' }
+      })
+    : fetch(CP_URL, {
+        method: 'GET',
+        headers: { 'Authorization': p.apiKey, 'Accept': 'application/json' }
+      })
+  return req.then(function(r) {
     if (!r.ok) throw new Error('HTTP ' + r.status)
     return r.json()
   }).then(function(data) {
@@ -672,13 +697,17 @@ document.addEventListener('DOMContentLoaded', function() {
   load()
   loadCardOrder()
   if (cards.length) renderAll()
-  if (providers.filter(function(p) { return p.apiKey && p.apiKey.trim() }).length) {
-    refreshAll()
-  }
+
+  // 先探测代理是否可用，再发起刷新（静态部署时自动走直连）
+  detectProxy().then(function() {
+    if (providers.filter(function(p) { return p.apiKey && p.apiKey.trim() }).length) {
+      refreshAll()
+    }
+  })
 
   // Register service worker for PWA
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(function() {})
+    navigator.serviceWorker.register('sw.js').catch(function() {})
   }
 })
 </script>
