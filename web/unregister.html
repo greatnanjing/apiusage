@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>清理缓存中...</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;color:#333;text-align:center;padding:20px}
+.box{max-width:320px}
+.icon{font-size:56px;margin-bottom:8px}
+h2{font-size:19px;margin:10px 0;font-weight:700}
+p{font-size:14px;color:#888;margin:6px 0;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="icon">🧹</div>
+  <h2 id="msg">正在清理旧版本缓存...</h2>
+  <p id="det">请稍候</p>
+</div>
+<script>
+// 恢复页：注销所有 Service Worker + 清空所有缓存，然后跳回主页。
+// 因为本页是新 URL，旧 SW 的 cache-first 缓存未命中 → 回退网络加载本页，
+// 从而能在旧 SW 仍控制页面的情况下执行清理。
+(async function () {
+  var msg = document.getElementById('msg')
+  var det = document.getElementById('det')
+  var steps = []
+
+  // 1. 注销所有 Service Worker
+  try {
+    var regs = await navigator.serviceWorker.getRegistrations()
+    await Promise.all(regs.map(function (r) { return r.unregister() }))
+    steps.push('已注销 ' + regs.length + ' 个 Service Worker')
+  } catch (e) {
+    steps.push('SW 注销跳过')
+  }
+
+  // 2. 清空所有缓存
+  try {
+    var keys = await caches.keys()
+    await Promise.all(keys.map(function (k) { return caches.delete(k) }))
+    steps.push('已清除 ' + keys.length + ' 个缓存')
+  } catch (e) {
+    steps.push('缓存清除跳过')
+  }
+
+  // 3. 清 localStorage 中可能残留的旧状态（可选，避免数据丢失只清缓存键）
+  // 这里不清 providers，保留用户已配置的 API KEY
+
+  det.textContent = steps.join('；')
+  msg.textContent = '清理完成，正在跳转...'
+
+  // 跳回主页（此时无 SW 控制，会全新加载最新版）
+  setTimeout(function () { location.replace('index.html') }, 1200)
+})()
+</script>
+</body>
+</html>
