@@ -1,0 +1,166 @@
+<template>
+  <div>
+    <div class="modal-mask" show="{{ visible }}">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <text class="modal-title">批量导入配置</text>
+          <div class="btn-close" @click="closePanel">
+            <text class="close-text">✕</text>
+          </div>
+        </div>
+
+        <text class="modal-hint">
+          粘贴 JSON 配置（含 8 家供应商模板），修改 apiKey 即可启动对应供应商。
+        </text>
+
+        <div class="template-actions">
+          <div class="btn-template" @click="loadTemplate">
+            <text class="btn-template-text">加载预置模板</text>
+          </div>
+          <div class="btn-template" @click="clearAll">
+            <text class="btn-template-text">清空</text>
+          </div>
+        </div>
+
+        <textarea class="json-input" placeholder="在此粘贴 JSON 配置..."
+                  onchange="onTextChange">{{ jsonText }}</textarea>
+
+        <text class="error-text" show="{{ parseError !== '' }}">{{ parseError }}</text>
+
+        <div class="modal-footer">
+          <div class="btn-cancel" @click="closePanel">
+            <text class="btn-text-cancel">取消</text>
+          </div>
+          <div class="btn-confirm" @click="confirmImport">
+            <text class="btn-text-confirm">导入</text>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { generateImportTemplate, PROVIDER_TEMPLATES } from '../common/providers.js'
+import prompt from '@system.prompt'
+
+export default {
+  props: ['visible'],
+
+  data: function () {
+    return {
+      jsonText: '',
+      parseError: ''
+    }
+  },
+
+  onShow: function () {
+    this.jsonText = generateImportTemplate()
+    this.parseError = ''
+  },
+
+  loadTemplate: function () {
+    this.jsonText = generateImportTemplate()
+    this.parseError = ''
+  },
+
+  clearAll: function () {
+    this.jsonText = ''
+    this.parseError = ''
+  },
+
+  onTextChange: function (e) {
+    this.jsonText = e.text || ''
+  },
+
+  closePanel: function () {
+    this.$dispatch('closeImportPanel')
+  },
+
+  confirmImport: function () {
+    if (!this.jsonText || !this.jsonText.trim()) {
+      this.parseError = '请输入 JSON 配置'
+      return
+    }
+
+    try {
+      var parsed = JSON.parse(this.jsonText)
+      if (!parsed.providers || !(parsed.providers instanceof Array)) {
+        this.parseError = '格式错误：顶层必须包含 providers 数组'
+        return
+      }
+
+      var validIds = []
+      for (var i = 0; i < PROVIDER_TEMPLATES.length; i++) {
+        validIds.push(PROVIDER_TEMPLATES[i].id)
+      }
+      for (var j = 0; j < parsed.providers.length; j++) {
+        if (validIds.indexOf(parsed.providers[j].id) === -1) {
+          this.parseError = '未知的供应商 id: ' + parsed.providers[j].id
+          return
+        }
+      }
+
+      this.parseError = ''
+      this.$dispatch('importConfirm', { json: this.jsonText })
+    } catch (e) {
+      this.parseError = 'JSON 格式错误: ' + e.message
+    }
+  }
+}
+</script>
+
+<style>
+.modal-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0,0,0,0.5);
+  align-items: center;
+  justify-content: center;
+}
+.modal-panel {
+  width: 92%;
+  max-height: 90%;
+  background-color: #fff;
+  border-radius: 8px;
+  flex-direction: column;
+}
+.modal-header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eee;
+}
+.modal-title { font-size: 17px; font-weight: bold; color: #1a1a1a; }
+.btn-close { width: 28px; height: 28px; align-items: center; justify-content: center; }
+.close-text { font-size: 18px; color: #999; }
+.modal-hint { font-size: 12px; color: #999; padding: 8px 16px; }
+
+.template-actions { flex-direction: row; padding: 0 16px 8px; }
+.btn-template { padding: 6px 12px; background-color: #e8f4fd; border-radius: 4px; margin-right: 8px; }
+.btn-template-text { font-size: 12px; color: #4a90d9; }
+
+.json-input {
+  flex: 1;
+  margin: 0 16px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 11px;
+  background-color: #fafafa;
+}
+
+.error-text { font-size: 12px; color: #e53935; padding: 0 16px 8px; }
+
+.modal-footer {
+  flex-direction: row;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
+}
+.btn-cancel { padding: 8px 16px; background-color: #eee; border-radius: 4px; margin-right: 8px; }
+.btn-confirm { padding: 8px 20px; background-color: #4a90d9; border-radius: 4px; }
+.btn-text-cancel { font-size: 14px; color: #666; }
+.btn-text-confirm { font-size: 14px; color: #fff; }
+</style>

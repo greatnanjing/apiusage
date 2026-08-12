@@ -1,0 +1,653 @@
+<template>
+  <div class="app">
+    <!-- ====== 顶栏 ====== -->
+    <div class="topbar">
+      <text class="title">API 用量</text>
+      <div class="topbar-actions">
+        <div class="btn-icon" @click="doRefreshAll">
+          <image class="icon" src="/assets/refresh.svg"></image>
+        </div>
+        <div class="btn-icon" @click="openImport">
+          <text class="btn-label">📋</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 副栏 ====== -->
+    <div class="subbar">
+      <text class="count-text">已配置: {{ activeCount }} 家</text>
+      <div class="btn-add" @click="openAdd">
+        <text class="btn-add-text">+ 添加</text>
+      </div>
+    </div>
+
+    <!-- ====== 刷新中 ====== -->
+    <div class="refresh-bar" show="{{ refreshing }}">
+      <text class="refresh-text">正在刷新...</text>
+    </div>
+
+    <!-- ====== 空状态 ====== -->
+    <div class="empty-state" show="{{ activeCount === 0 }}">
+      <text class="empty-icon">📊</text>
+      <text class="empty-title">还没有配置供应商</text>
+      <text class="empty-hint">点击「+ 添加」选择供应商</text>
+      <text class="empty-hint">或「📋」导入 JSON 配置</text>
+    </div>
+
+    <!-- ====== 卡片区域 ====== -->
+    <div class="card-area" show="{{ activeCount > 0 }}">
+      <div class="provider-card" for="card in cards">
+        <div class="card-header" @click="toggleCard(card.id)">
+          <div class="card-left">
+            <text class="card-name">{{ card.name }}</text>
+            <text class="card-status status-{{ card.status }}">{{ card.statusLabel }}</text>
+          </div>
+          <text class="card-balance">{{ card.balanceText }}</text>
+        </div>
+        <div class="card-detail" show="{{ card.expanded }}">
+          <div class="detail-row" for="row in card.extraRows">
+            <text class="detail-label">{{ row.label }}</text>
+            <text class="detail-value">{{ row.value }}</text>
+          </div>
+          <div class="card-actions">
+            <div class="action-btn" @click="refreshOne(card.id)"><text class="action-text">刷新</text></div>
+            <div class="action-btn" @click="editOne(card.id)"><text class="action-text">编辑</text></div>
+            <div class="action-btn action-del" @click="deleteOne(card.id)"><text class="action-text">删除</text></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 弹窗：添加供应商 ====== -->
+    <div class="modal-mask" show="{{ showAddPanel }}">
+      <div class="modal-panel add-panel">
+        <div class="modal-header">
+          <text class="modal-title">添加供应商</text>
+          <div class="btn-close" @click="showAddPanel = false"><text class="close-text">✕</text></div>
+        </div>
+        <text class="hint">勾选并填入 API KEY</text>
+        <div class="add-scroll">
+          <div class="add-item" for="tpl in availableTemplates">
+            <div class="add-item-row">
+              <div class="checkbox" @click="checkTpl(tpl.id)">
+                <text class="check-mark" show="{{ tpl.checked }}">✓</text>
+              </div>
+              <text class="add-item-name">{{ tpl.name }}</text>
+            </div>
+            <div class="add-key-area" show="{{ tpl.checked }}">
+              <input class="add-input" placeholder="API KEY" value="{{ tpl.key }}" onchange="onAddKeyChange"></input>
+              <input class="add-input" placeholder="API Secret"
+                     show="{{ tpl.isHmac }}" value="{{ tpl.secret }}" onchange="onAddSecretChange"></input>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div class="btn-cancel" @click="showAddPanel = false"><text class="btn-text-cancel">取消</text></div>
+          <div class="btn-confirm" @click="confirmAdd"><text class="btn-text-confirm">确认添加</text></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 弹窗：批量导入 JSON ====== -->
+    <div class="modal-mask" show="{{ showImportPanel }}">
+      <div class="modal-panel import-panel">
+        <div class="modal-header">
+          <text class="modal-title">批量导入配置</text>
+          <div class="btn-close" @click="showImportPanel = false"><text class="close-text">✕</text></div>
+        </div>
+        <text class="hint">修改 apiKey 后粘贴完整的 JSON</text>
+        <div class="btn-tmpl" @click="loadTemplate"><text class="btn-tmpl-text">加载预置模板</text></div>
+        <textarea class="import-textarea" onchange="onImportTextChange">{{ importText }}</textarea>
+        <text class="error-text" show="{{ importError }}">{{ importError }}</text>
+        <div class="modal-footer">
+          <div class="btn-cancel" @click="showImportPanel = false"><text class="btn-text-cancel">取消</text></div>
+          <div class="btn-confirm" @click="confirmImport"><text class="btn-text-confirm">导入</text></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 弹窗：编辑 KEY ====== -->
+    <div class="modal-mask" show="{{ showEditPanel }}">
+      <div class="modal-content">
+        <text class="modal-title">编辑 {{ editName }}</text>
+        <input class="modal-input" placeholder="API KEY" value="{{ editKey }}" onchange="onEditKeyChg"></input>
+        <input class="modal-input" placeholder="API Secret" show="{{ editHasSecret }}"
+               value="{{ editSecret }}" onchange="onEditSecretChg"></input>
+        <div class="modal-footer">
+          <div class="btn-cancel" @click="showEditPanel = false"><text class="btn-text-cancel">取消</text></div>
+          <div class="btn-confirm" @click="saveEdit"><text class="btn-text-confirm">保存</text></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { PROVIDER_TEMPLATES, generateImportTemplate } from '../../common/providers.js'
+import { queryAllBalances, queryBalance } from '../../common/api.js'
+import { parseResponse, formatForDisplay } from '../../common/parser.js'
+import { loadProviders, saveProviders, loadSnapshot, saveSnapshot } from '../../common/storage.js'
+import prompt from '@system.prompt'
+
+var STATUS_MAP = { ok: '正常', low: '不足', exhausted: '已耗尽', unknown: '未知', error: '错误' }
+
+var LABEL_MAP = {
+  voucher: '代金券', cash: '现金', credit: '授信', chargeBalance: '充值余额',
+  availableBalance: '可用余额', recharge: '充值', gift: '赠送', owed: '欠费',
+  type: '类型', used: '已用', total: '总额', name: '用户', currency: '货币'
+}
+
+export default {
+  data: {
+    // 核心
+    providers: [],
+    cards: [],
+    refreshing: false,
+
+    // 添加弹窗
+    showAddPanel: false,
+    availableTemplates: [],
+    addKeyMap: {},
+    addSecretMap: {},
+    addChecked: {},
+
+    // 导入弹窗
+    showImportPanel: false,
+    importText: '',
+    importError: '',
+
+    // 编辑弹窗
+    showEditPanel: false,
+    editId: '',
+    editName: '',
+    editKey: '',
+    editSecret: '',
+    editHasSecret: false,
+
+    // 编辑输入缓冲
+    _chgKey: '',
+    _chgSecret: ''
+  },
+
+  computed: {
+    activeCount: function () {
+      var n = 0
+      for (var i = 0; i < this.providers.length; i++) {
+        if (this.providers[i].apiKey && this.providers[i].apiKey.trim()) n++
+      }
+      return n
+    }
+  },
+
+  // ============ 生命周期 ============
+
+  onInit: function () {
+    var self = this
+    loadProviders().then(function (saved) {
+      if (saved && saved.length) {
+        self.providers = saved
+      }
+      return loadSnapshot()
+    }).then(function (snap) {
+      if (snap && snap.results && snap.results.length) {
+        self._renderCards(snap.results)
+      }
+      if (self.activeCount > 0) {
+        self.doRefreshAll()
+      }
+    })
+  },
+
+  onShow: function () {
+    if (this.activeCount > 0 && !this.refreshing) {
+      this.doRefreshAll()
+    }
+  },
+
+  // ============ 刷新 ============
+
+  doRefreshAll: function () {
+    var self = this
+    var active = this._getActive()
+    if (!active.length) return
+
+    this.refreshing = true
+    queryAllBalances(this.providers).then(function (results) {
+      var display = []
+      var handled = {}
+      for (var i = 0; i < results.length; i++) {
+        var r = results[i]
+        handled[r.providerId] = true
+        if (r.status === 'ok') {
+          display.push(self._buildCard(r.providerId, r.data))
+        } else {
+          display.push({
+            id: r.providerId,
+            name: self._provName(r.providerId),
+            status: 'error',
+            statusLabel: '错误',
+            balanceText: r.message || '失败',
+            expanded: false,
+            extraRows: [],
+            lastUpdate: Date.now()
+          })
+        }
+      }
+      for (var j = 0; j < active.length; j++) {
+        if (!handled[active[j].id]) {
+          display.push({
+            id: active[j].id,
+            name: active[j].name,
+            status: 'unknown',
+            statusLabel: '未知',
+            balanceText: '—',
+            expanded: false,
+            extraRows: [],
+            lastUpdate: 0
+          })
+        }
+      }
+      self._renderCards(display)
+      saveSnapshot(display)
+      self.refreshing = false
+    }).catch(function () {
+      self.refreshing = false
+    })
+  },
+
+  refreshOne: function (id) {
+    var self = this
+    var prov = this._findProv(id)
+    if (!prov) return
+    queryBalance(prov).then(function (res) {
+      var card = self._buildCard(prov.id, res.data)
+      for (var i = 0; i < self.cards.length; i++) {
+        if (self.cards[i].id === id) {
+          self.cards.splice(i, 1, card)
+          break
+        }
+      }
+    })
+  },
+
+  // ============ 卡片操作 ============
+
+  toggleCard: function (id) {
+    for (var i = 0; i < this.cards.length; i++) {
+      if (this.cards[i].id === id) {
+        this.cards[i].expanded = !this.cards[i].expanded
+        break
+      }
+    }
+  },
+
+  editOne: function (id) {
+    var prov = this._findProv(id)
+    if (!prov) return
+    this.editId = id
+    this.editName = prov.name
+    this.editKey = prov.apiKey || ''
+    this.editSecret = prov.apiSecret || ''
+    this.editHasSecret = prov.authType === 'hmac'
+    this.showEditPanel = true
+  },
+
+  deleteOne: function (id) {
+    var prov = this._findProv(id)
+    if (prov) {
+      prov.apiKey = ''
+      prov.apiSecret = ''
+      saveProviders(this.providers)
+    }
+    var cards = []
+    for (var i = 0; i < this.cards.length; i++) {
+      if (this.cards[i].id !== id) cards.push(this.cards[i])
+    }
+    this.cards = cards
+  },
+
+  // ============ 添加供应商 ============
+
+  openAdd: function () {
+    var list = []
+    for (var i = 0; i < PROVIDER_TEMPLATES.length; i++) {
+      var tpl = PROVIDER_TEMPLATES[i]
+      var exists = false
+      for (var j = 0; j < this.providers.length; j++) {
+        if (this.providers[j].id === tpl.id && this.providers[j].apiKey && this.providers[j].apiKey.trim()) {
+          exists = true
+          break
+        }
+      }
+      if (!exists) {
+        list.push({
+          id: tpl.id,
+          name: tpl.name,
+          isHmac: tpl.authType === 'hmac',
+          checked: false,
+          key: '',
+          secret: ''
+        })
+      }
+    }
+    this.availableTemplates = list
+    this.showAddPanel = true
+  },
+
+  checkTpl: function (id) {
+    for (var i = 0; i < this.availableTemplates.length; i++) {
+      if (this.availableTemplates[i].id === id) {
+        this.availableTemplates[i].checked = !this.availableTemplates[i].checked
+        break
+      }
+    }
+  },
+
+  onAddKeyChange: function (e) {
+    // Quick App input onchange gives e.text
+    // We use a simple data binding approach
+  },
+
+  onAddSecretChange: function (e) {
+  },
+
+  confirmAdd: function () {
+    var self = this
+    var toAdd = []
+    for (var i = 0; i < this.availableTemplates.length; i++) {
+      var t = this.availableTemplates[i]
+      if (t.checked) {
+        if (!t.key || !t.key.trim()) {
+          prompt.showToast({ message: '请填写 ' + t.name + ' 的 API KEY' })
+          return
+        }
+        toAdd.push(t)
+      }
+    }
+    if (!toAdd.length) {
+      prompt.showToast({ message: '请至少选择一个供应商' })
+      return
+    }
+
+    for (var j = 0; j < toAdd.length; j++) {
+      var tpl = null
+      for (var k = 0; k < PROVIDER_TEMPLATES.length; k++) {
+        if (PROVIDER_TEMPLATES[k].id === toAdd[j].id) { tpl = PROVIDER_TEMPLATES[k]; break }
+      }
+      if (!tpl) continue
+
+      var exists = false
+      for (var m = 0; m < this.providers.length; m++) {
+        if (this.providers[m].id === toAdd[j].id) {
+          this.providers[m].apiKey = toAdd[j].key
+          this.providers[m].apiSecret = toAdd[j].secret || ''
+          exists = true
+          break
+        }
+      }
+      if (!exists) {
+        var copy = JSON.parse(JSON.stringify(tpl))
+        copy.apiKey = toAdd[j].key
+        copy.apiSecret = toAdd[j].secret || ''
+        this.providers.push(copy)
+      }
+    }
+
+    saveProviders(this.providers)
+    this.showAddPanel = false
+    this.doRefreshAll()
+  },
+
+  // ============ 导入 JSON ============
+
+  openImport: function () {
+    this.importText = generateImportTemplate()
+    this.importError = ''
+    this.showImportPanel = true
+  },
+
+  loadTemplate: function () {
+    this.importText = generateImportTemplate()
+    this.importError = ''
+  },
+
+  onImportTextChange: function (e) {
+    this.importText = e.text || ''
+  },
+
+  confirmImport: function () {
+    if (!this.importText || !this.importText.trim()) {
+      this.importError = '请输入 JSON 配置'
+      return
+    }
+    try {
+      var data = JSON.parse(this.importText)
+      if (!data.providers || !(data.providers instanceof Array)) {
+        this.importError = '格式错误：需要 providers 数组'
+        return
+      }
+      for (var i = 0; i < data.providers.length; i++) {
+        var imp = data.providers[i]
+        var valid = false
+        for (var k = 0; k < PROVIDER_TEMPLATES.length; k++) {
+          if (PROVIDER_TEMPLATES[k].id === imp.id) { valid = true; break }
+        }
+        if (!valid) { this.importError = '未知供应商: ' + imp.id; return }
+
+        var found = false
+        for (var j = 0; j < this.providers.length; j++) {
+          if (this.providers[j].id === imp.id) {
+            this.providers[j].apiKey = imp.apiKey || ''
+            this.providers[j].apiSecret = imp.apiSecret || ''
+            found = true
+            break
+          }
+        }
+        if (!found) {
+          var tpl = null
+          for (var m = 0; m < PROVIDER_TEMPLATES.length; m++) {
+            if (PROVIDER_TEMPLATES[m].id === imp.id) { tpl = PROVIDER_TEMPLATES[m]; break }
+          }
+          if (tpl) {
+            var copy = JSON.parse(JSON.stringify(tpl))
+            copy.apiKey = imp.apiKey || ''
+            copy.apiSecret = imp.apiSecret || ''
+            this.providers.push(copy)
+          }
+        }
+      }
+      saveProviders(this.providers)
+      this.showImportPanel = false
+      this.doRefreshAll()
+    } catch (e) {
+      this.importError = 'JSON 格式错误: ' + e.message
+    }
+  },
+
+  // ============ 编辑弹窗 ============
+
+  onEditKeyChg: function (e) {
+    this.editKey = e.text || ''
+  },
+
+  onEditSecretChg: function (e) {
+    this.editSecret = e.text || ''
+  },
+
+  saveEdit: function () {
+    var prov = this._findProv(this.editId)
+    if (prov) {
+      prov.apiKey = this.editKey.trim()
+      prov.apiSecret = this.editSecret ? this.editSecret.trim() : ''
+      saveProviders(this.providers)
+    }
+    this.showEditPanel = false
+    this.doRefreshAll()
+  },
+
+  // ============ 内部辅助 ============
+
+  _getActive: function () {
+    var arr = []
+    for (var i = 0; i < this.providers.length; i++) {
+      if (this.providers[i].apiKey && this.providers[i].apiKey.trim()) arr.push(this.providers[i])
+    }
+    return arr
+  },
+
+  _findProv: function (id) {
+    for (var i = 0; i < this.providers.length; i++) {
+      if (this.providers[i].id === id) return this.providers[i]
+    }
+    return null
+  },
+
+  _provName: function (id) {
+    var p = this._findProv(id)
+    return p ? p.name : id
+  },
+
+  _buildCard: function (id, rawData) {
+    var prov = this._findProv(id)
+    if (!prov) return { id: id, name: id, status: 'unknown', statusLabel: '未知', balanceText: '—', expanded: false, extraRows: [], lastUpdate: 0 }
+    var parsed = parseResponse(rawData, prov.responseMapping)
+    var fmt = formatForDisplay(parsed)
+    var rows = []
+    var extra = fmt.extra || {}
+    var keys = Object.keys(extra)
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i]
+      var val = extra[key]
+      if (val !== null && val !== undefined) {
+        rows.push({ label: LABEL_MAP[key] || key, value: String(val) })
+      }
+    }
+    return {
+      id: id,
+      name: prov.name,
+      status: fmt.status,
+      statusLabel: STATUS_MAP[fmt.status] || '未知',
+      balanceText: fmt.balanceDisplay,
+      expanded: false,
+      extraRows: rows,
+      lastUpdate: Date.now()
+    }
+  },
+
+  _renderCards: function (cards) {
+    for (var i = 0; i < cards.length; i++) {
+      if (!cards[i].statusLabel) {
+        cards[i].statusLabel = STATUS_MAP[cards[i].status] || '未知'
+      }
+      if (!cards[i].extraRows) cards[i].extraRows = []
+    }
+    this.cards = cards
+  }
+}
+</script>
+
+<style>
+.app { flex-direction: column; background-color: #f5f5f5; height: 100%; }
+
+/* 顶栏 */
+.topbar {
+  flex-direction: row; align-items: center; justify-content: space-between;
+  padding: 14px 16px; background-color: #fff; border-bottom: 1px solid #e0e0e0;
+}
+.title { font-size: 24px; font-weight: bold; color: #1a1a1a; }
+.topbar-actions { flex-direction: row; }
+.btn-icon { width: 40px; height: 40px; align-items: center; justify-content: center; margin-left: 8px; }
+.btn-label { font-size: 24px; }
+.icon { width: 26px; height: 26px; }
+
+/* 副栏 */
+.subbar {
+  flex-direction: row; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background-color: #fafafa; border-bottom: 1px solid #eee;
+}
+.count-text { font-size: 16px; color: #888; }
+.btn-add { padding: 6px 16px; background-color: #4a90d9; border-radius: 4px; }
+.btn-add-text { font-size: 16px; color: #fff; }
+
+.refresh-bar { flex-direction: row; justify-content: center; padding: 10px; }
+.refresh-text { font-size: 15px; color: #999; }
+
+/* 空状态 */
+.empty-state { flex-direction: column; align-items: center; justify-content: center; flex: 1; }
+.empty-icon { font-size: 56px; margin-bottom: 14px; }
+.empty-title { font-size: 20px; color: #666; margin-bottom: 8px; }
+.empty-hint { font-size: 16px; color: #aaa; margin-top: 4px; }
+
+/* 卡片 */
+.card-area { flex: 1; padding: 10px 14px; }
+.provider-card {
+  background-color: #fff; border-radius: 8px; padding: 14px 16px;
+  margin-bottom: 8px; border-left-width: 4px; border-left-color: #4a90d9;
+}
+.card-header { flex-direction: row; justify-content: space-between; align-items: center; }
+.card-left { flex-direction: column; }
+.card-name { font-size: 18px; font-weight: bold; color: #1a1a1a; }
+.card-status { font-size: 14px; margin-top: 3px; }
+.card-balance { font-size: 20px; font-weight: bold; color: #1a1a1a; }
+.status-ok { color: #4caf50; }
+.status-low { color: #ff9800; }
+.status-exhausted { color: #f44336; }
+.status-unknown { color: #999; }
+.status-error { color: #f44336; }
+
+.card-detail { margin-top: 10px; border-top: 1px solid #f0f0f0; padding-top: 10px; flex-direction: column; }
+.detail-row { flex-direction: row; justify-content: space-between; padding: 5px 0; }
+.detail-label { font-size: 15px; color: #888; }
+.detail-value { font-size: 15px; color: #333; }
+.card-actions { flex-direction: row; margin-top: 10px; }
+.action-btn { padding: 6px 14px; background-color: #f0f0f0; border-radius: 4px; margin-right: 8px; }
+.action-del { background-color: #fce4ec; }
+.action-text { font-size: 15px; color: #555; }
+.action-del .action-text { color: #e53935; }
+
+/* 弹窗通用 */
+.modal-mask {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;
+}
+.modal-header {
+  flex-direction: row; justify-content: space-between; align-items: center;
+  padding: 16px 18px; border-bottom: 1px solid #eee;
+}
+.modal-title { font-size: 20px; font-weight: bold; color: #1a1a1a; }
+.btn-close { padding: 4px; }
+.close-text { font-size: 22px; color: #999; }
+.hint { font-size: 15px; color: #aaa; padding: 10px 18px; }
+.modal-footer { flex-direction: row; justify-content: flex-end; padding: 14px 18px; border-top: 1px solid #eee; }
+.btn-cancel { padding: 10px 20px; background-color: #eee; border-radius: 4px; margin-right: 10px; }
+.btn-confirm { padding: 10px 24px; background-color: #4a90d9; border-radius: 4px; }
+.btn-text-cancel { font-size: 16px; color: #666; }
+.btn-text-confirm { font-size: 16px; color: #fff; }
+
+/* 添加弹窗 */
+.add-panel { width: 88%; max-height: 80%; background-color: #fff; border-radius: 8px; flex-direction: column; }
+.add-scroll { flex: 1; padding: 0 18px; }
+.add-item { margin-bottom: 12px; flex-direction: column; }
+.add-item-row { flex-direction: row; align-items: center; padding: 8px 0; }
+.checkbox { width: 26px; height: 26px; border: 1px solid #ccc; border-radius: 3px; align-items: center; justify-content: center; margin-right: 10px; }
+.check-mark { font-size: 16px; color: #4a90d9; }
+.add-item-name { font-size: 17px; color: #333; }
+.add-key-area { margin-left: 36px; margin-top: 8px; flex-direction: column; }
+.add-input { height: 42px; border: 1px solid #ddd; border-radius: 4px; padding: 0 10px; margin-bottom: 8px; font-size: 15px; }
+
+/* 导入弹窗 */
+.import-panel { width: 92%; max-height: 90%; background-color: #fff; border-radius: 8px; flex-direction: column; }
+.btn-tmpl { margin: 0 18px 10px; padding: 8px 14px; background-color: #e8f4fd; border-radius: 4px; align-self: flex-start; }
+.btn-tmpl-text { font-size: 14px; color: #4a90d9; }
+.import-textarea {
+  flex: 1; margin: 0 18px 10px; border: 1px solid #ddd; border-radius: 4px;
+  padding: 12px; font-size: 13px; background-color: #fafafa;
+}
+.error-text { font-size: 14px; color: #e53935; padding: 0 18px 10px; }
+
+/* 编辑弹窗 */
+.modal-content {
+  width: 82%; background-color: #fff; border-radius: 8px; padding: 22px; flex-direction: column;
+}
+.modal-input { height: 44px; border: 1px solid #ddd; border-radius: 4px; padding: 0 12px; margin-bottom: 12px; font-size: 16px; }
+</style>

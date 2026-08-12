@@ -1,0 +1,6 @@
+.playwright-mcp/
+.claude/
+node_modules/
+build/
+dist/
+.hap/

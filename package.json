@@ -1,0 +1,20 @@
+{
+  "name": "apiusage",
+  "version": "1.0.0",
+  "description": "AI API 用量/余额查询快应用",
+  "scripts": {
+    "start": "hap server --watch",
+    "server": "hap server",
+    "build": "hap build",
+    "release": "hap release",
+    "watch": "hap watch",
+    "debug": "hap debug"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "hap-toolkit": "^2.0.9-beta.3"
+  },
+  "browserslist": [
+    "chrome 65"
+  ]
+}

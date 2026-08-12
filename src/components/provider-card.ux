@@ -1,0 +1,178 @@
+<template>
+  <div class="card" @click="toggleExpand">
+    <div class="card-header">
+      <div class="card-left">
+        <text class="card-name">{{ result.name }}</text>
+        <text class="card-status status-{{ result.status }}">{{ statusLabel }}</text>
+      </div>
+      <div class="card-right">
+        <text class="card-balance">{{ result.balanceDisplay }}</text>
+        <text class="card-update" show="{{ result.lastUpdate > 0 }}">{{ timeAgo }}</text>
+      </div>
+    </div>
+
+    <!-- 展开详情 -->
+    <div class="card-detail" show="{{ expanded }}">
+      <div class="detail-row" for="entry in extraEntries">
+        <text class="detail-label">{{ entry.label }}</text>
+        <text class="detail-value">{{ entry.value }}</text>
+      </div>
+      <div class="card-actions">
+        <div class="action-btn" @click="handleRefresh">
+          <text class="action-text">刷新</text>
+        </div>
+        <div class="action-btn" @click="handleEdit">
+          <text class="action-text">编辑</text>
+        </div>
+        <div class="action-btn action-delete" @click="handleDelete">
+          <text class="action-text">删除</text>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+const STATUS_LABELS = {
+  ok: '正常',
+  low: '不足',
+  exhausted: '已耗尽',
+  unknown: '未知',
+  error: '错误'
+}
+
+export default {
+  props: ['result'],
+
+  data() {
+    return { expanded: false }
+  },
+
+  computed: {
+    statusLabel: function () {
+      return STATUS_LABELS[this.result.status] || STATUS_LABELS.unknown
+    },
+    timeAgo: function () {
+      if (!this.result.lastUpdate) return ''
+      const diff = Date.now() - this.result.lastUpdate
+      if (diff < 60000) return '刚刚'
+      if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
+      return Math.floor(diff / 3600000) + '小时前'
+    },
+    extraEntries: function () {
+      const entries = []
+      const extra = this.result.extra || {}
+      const keys = Object.keys(extra)
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const val = extra[key]
+        if (val !== null && val !== undefined) {
+          entries.push({ label: formatLabel(key), value: String(val) })
+        }
+      }
+      return entries
+    }
+  },
+
+  toggleExpand: function () {
+    this.expanded = !this.expanded
+  },
+
+  handleRefresh: function () {
+    this.$dispatch('refreshSingle', { id: this.result.id })
+  },
+
+  handleEdit: function () {
+    this.$dispatch('editProvider', { id: this.result.id })
+  },
+
+  handleDelete: function () {
+    this.$dispatch('deleteProvider', { id: this.result.id })
+  }
+}
+
+function formatLabel(key) {
+  const labels = {
+    voucher: '代金券', cash: '现金', credit: '授信',
+    chargeBalance: '充值余额', availableBalance: '可用余额',
+    recharge: '充值', gift: '赠送', owed: '欠费',
+    type: '类型', used: '已用', total: '总额', name: '用户', currency: '货币'
+  }
+  return labels[key] || key
+}
+</script>
+
+<style>
+.card {
+  background-color: #fff;
+  border-radius: 6px;
+  padding: 10px 14px;
+  border-left-width: 3px;
+  border-left-color: #4a90d9;
+}
+.card-header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+.card-left {
+  flex-direction: column;
+}
+.card-name {
+  font-size: 15px;
+  font-weight: bold;
+  color: #1a1a1a;
+}
+.card-status {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.status-ok { color: #4caf50; }
+.status-low { color: #ff9800; }
+.status-exhausted { color: #f44336; }
+.status-unknown { color: #999; }
+.status-error { color: #f44336; }
+
+.card-right {
+  flex-direction: column;
+  align-items: flex-end;
+}
+.card-balance {
+  font-size: 17px;
+  font-weight: bold;
+  color: #1a1a1a;
+}
+.card-update {
+  font-size: 10px;
+  color: #bbb;
+  margin-top: 2px;
+}
+
+.card-detail {
+  margin-top: 8px;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 8px;
+  flex-direction: column;
+}
+.detail-row {
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+.detail-label { font-size: 12px; color: #999; }
+.detail-value { font-size: 12px; color: #333; }
+
+.card-actions {
+  flex-direction: row;
+  margin-top: 8px;
+}
+.action-btn {
+  padding: 4px 10px;
+  background-color: #f0f0f0;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+.action-delete { background-color: #fce4ec; }
+.action-text { font-size: 12px; color: #555; }
+.action-delete .action-text { color: #e53935; }
+</style>

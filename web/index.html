@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="API用量">
+<meta name="theme-color" content="#4a90d9">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%234a90d9'/><text x='16' y='23' text-anchor='middle' font-size='18' fill='white'>📊</text></svg>">
+<title>API 用量</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;min-height:100vh;min-height:100dvh}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#fff;border-bottom:1px solid #e0e0e0;position:sticky;top:0;z-index:10}
+.topbar .title{font-size:22px;font-weight:700;color:#1a1a1a}
+.topbar-actions{display:flex;gap:4px}
+.btn-icon{width:40px;height:40px;border:none;background:none;font-size:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer}
+.btn-icon:active{background:#f0f0f0}
+
+.subbar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#fafafa;border-bottom:1px solid #eee}
+.count-text{font-size:15px;color:#888}
+.btn-add{border:none;padding:6px 16px;background:#4a90d9;color:#fff;border-radius:6px;font-size:15px;cursor:pointer;font-weight:500}
+.btn-add:active{background:#3a7bc8}
+
+.refresh-bar{display:flex;align-items:center;justify-content:center;padding:10px;gap:8px}
+.refresh-bar.hidden{display:none}
+.spinner{width:18px;height:18px;border:2px solid #ddd;border-top-color:#4a90d9;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.refresh-text{font-size:14px;color:#999}
+
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:8px}
+.empty-state.hidden{display:none}
+.empty-icon{font-size:56px}
+.empty-title{font-size:19px;color:#666}
+.empty-hint{font-size:15px;color:#aaa}
+
+.card-list{flex:1;overflow-y:auto;padding:10px 14px}
+.card-list.hidden{display:none}
+.card{background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:8px;border-left:3px solid #4a90d9;transition:opacity .2s}
+.card.dragging{opacity:.4}
+.card.drag-over{border-top:3px solid #4a90d9}
+.card-main{display:flex;align-items:flex-start;gap:8px}
+.card-body{flex:1;min-width:0}
+.card-name-row{display:flex;align-items:center;gap:8px}
+.card-name{font-size:15px;font-weight:700;color:#1a1a1a}
+.card-status{font-size:11px}
+.status-ok{color:#4caf50}.status-low{color:#ff9800}.status-exhausted{color:#f44336}.status-unknown{color:#999}.status-error{color:#f44336}
+.card-balance{font-size:16px;font-weight:700;color:#1a1a1a;text-align:right;white-space:nowrap}
+.card-detail-info{margin-top:4px;display:flex;flex-wrap:wrap;gap:2px 14px}
+.detail-item{font-size:11px;color:#888}
+.detail-item .dl{color:#888}.detail-item .dv{color:#555}
+.detail-item.cp-item .dv{font-weight:600}
+.detail-item.cp-item .dv.ok{color:#4caf50}
+.detail-item.cp-item .dv.warn{color:#ff9800}
+.detail-item.cp-item .dv.high{color:#f44336}
+.card-btns{display:flex;gap:4px;flex-shrink:0;align-items:flex-start}
+.card-btns button{border:none;padding:4px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
+.card-btns button:active{opacity:.8}
+.btn-refresh{background:#f0f0f0;color:#555}
+.btn-edit{background:#e3f2fd;color:#1976d2}
+.btn-delete{background:#fce4ec;color:#e53935}
+.drag-handle{cursor:grab;color:#ccc;font-size:16px;user-select:none;line-height:1;padding:2px 0;flex-shrink:0}
+.drag-handle:active{cursor:grabbing}
+
+/* 弹窗遮罩 */
+.modal-mask{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal-mask.hidden{display:none}
+.modal-panel{background:#fff;border-radius:10px;display:flex;flex-direction:column;max-height:85vh;overflow:hidden}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid #eee;flex-shrink:0}
+.modal-title{font-size:19px;font-weight:700}
+.btn-close{border:none;background:none;font-size:22px;color:#999;cursor:pointer;padding:4px}
+
+/* 添加弹窗 */
+.add-panel{width:90%}
+.add-scroll{flex:1;overflow-y:auto;padding:8px 18px}
+.add-hint{font-size:14px;color:#aaa;padding:8px 18px 0;flex-shrink:0}
+.add-item{border-bottom:1px solid #f5f5f5;padding:10px 0}
+.add-item-row{display:flex;align-items:center;gap:10px;cursor:pointer}
+.cb{width:24px;height:24px;border:2px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cb.checked{background:#4a90d9;border-color:#4a90d9;color:#fff;font-size:14px}
+.add-item-name{font-size:16px}
+.add-key-area{display:none;margin:8px 0 0 34px;flex-direction:column;gap:6px}
+.add-key-area.show{display:flex}
+.add-key-area input{height:40px;border:1px solid #ddd;border-radius:4px;padding:0 10px;font-size:14px;width:100%}
+
+/* 导入弹窗 */
+.import-panel{width:92%}
+.import-hint{font-size:14px;color:#aaa;padding:8px 18px 0;flex-shrink:0}
+.btn-tmpl{margin:8px 18px;padding:8px 14px;background:#e8f4fd;color:#4a90d9;border:none;border-radius:4px;font-size:13px;cursor:pointer;align-self:flex-start;flex-shrink:0}
+.import-textarea{flex:1;margin:0 18px 10px;border:1px solid #ddd;border-radius:4px;padding:12px;font-size:12px;font-family:monospace;resize:none;min-height:200px}
+.error-msg{display:none;font-size:13px;color:#e53935;padding:0 18px 8px}
+.error-msg.show{display:block}
+
+/* 编辑弹窗 */
+.edit-panel{width:84%;padding:22px}
+.edit-panel input{height:44px;border:1px solid #ddd;border-radius:4px;padding:0 12px;font-size:15px;width:100%;margin-bottom:10px}
+
+/* 底部按钮 */
+.modal-footer{display:flex;justify-content:flex-end;padding:12px 18px;border-top:1px solid #eee;gap:8px;flex-shrink:0}
+.modal-footer button{border:none;padding:10px 22px;border-radius:6px;font-size:15px;cursor:pointer;font-weight:500}
+.btn-cancel{background:#eee;color:#666}
+.btn-confirm{background:#4a90d9;color:#fff}
+.modal-footer button:active{opacity:.8}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <span class="title">API 用量</span>
+    <div class="topbar-actions">
+      <button class="btn-icon" onclick="refreshAll()" title="刷新">🔄</button>
+      <button class="btn-icon" onclick="openImport()" title="导入">📋</button>
+    </div>
+  </div>
+
+  <div class="subbar">
+    <span class="count-text" id="countText">已配置: 0 家</span>
+    <button class="btn-add" onclick="openAdd()">+ 添加</button>
+  </div>
+
+  <div class="refresh-bar hidden" id="refreshBar">
+    <div class="spinner"></div>
+    <span class="refresh-text">正在刷新...</span>
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    <span class="empty-icon">📊</span>
+    <span class="empty-title">还没有配置供应商</span>
+    <span class="empty-hint">点击「+ 添加」选择供应商并填入 API KEY</span>
+    <span class="empty-hint">或「📋」导入 JSON 配置</span>
+  </div>
+
+  <div class="card-list hidden" id="cardList"></div>
+
+  <!-- 添加弹窗 -->
+  <div class="modal-mask hidden" id="addModal">
+    <div class="modal-panel add-panel">
+      <div class="modal-header">
+        <span class="modal-title">添加供应商</span>
+        <button class="btn-close" onclick="closePanel('addModal')">✕</button>
+      </div>
+      <div class="add-hint">勾选并填入 API KEY</div>
+      <div class="add-scroll" id="addScroll"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closePanel('addModal')">取消</button>
+        <button class="btn-confirm" onclick="confirmAdd()">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入弹窗 -->
+  <div class="modal-mask hidden" id="importModal">
+    <div class="modal-panel import-panel">
+      <div class="modal-header">
+        <span class="modal-title">批量导入配置</span>
+        <button class="btn-close" onclick="closePanel('importModal')">✕</button>
+      </div>
+      <div class="import-hint">修改 apiKey 后粘贴完整的 JSON</div>
+      <button class="btn-tmpl" onclick="loadTemplate()">📋 加载预置模板</button>
+      <textarea class="import-textarea" id="importTextarea"></textarea>
+      <div class="error-msg" id="importError"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closePanel('importModal')">取消</button>
+        <button class="btn-confirm" onclick="confirmImport()">导入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 编辑弹窗 -->
+  <div class="modal-mask hidden" id="editModal">
+    <div class="modal-panel edit-panel">
+      <span class="modal-title" id="editTitle" style="margin-bottom:14px;display:block">编辑</span>
+      <input id="editKeyInput" placeholder="API KEY" style="margin-bottom:8px">
+      <input id="editSecretInput" placeholder="API Secret（仅讯飞需要）" style="display:none;margin-bottom:8px">
+      <div class="modal-footer" style="padding:12px 0 0;border:none">
+        <button class="btn-cancel" onclick="closePanel('editModal')">取消</button>
+        <button class="btn-confirm" onclick="saveEdit()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== 8 家供应商模板 ====================
+var TEMPLATES = [
+  {id:'deepseek',name:'DeepSeek',apiKey:'',endpoint:'https://api.deepseek.com/user/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'balance_infos[0].total_balance',currencyPath:'balance_infos[0].currency'}},
+  {id:'kimi',name:'Kimi / 月之暗面',apiKey:'',endpoint:'https://api.moonshot.cn/v1/users/me/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.available_balance',voucherPath:'data.voucher_balance',cashPath:'data.cash_balance'}},
+  {id:'siliconflow',name:'硅基智能 / SiliconFlow',apiKey:'',endpoint:'https://api.siliconflow.cn/v1/user/info',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.totalBalance',chargeBalancePath:'data.chargeBalance',namePath:'data.name'}},
+  {id:'stepfun',name:'阶跃星辰 / StepFun',apiKey:'',endpoint:'https://api.stepfun.com/v1/accounts',method:'GET',authType:'bearer',responseMapping:{balancePath:'balance',cashPath:'total_cash_balance',voucherPath:'total_voucher_balance',typePath:'type'}},
+  {id:'zhipu',name:'智谱 / GLM',apiKey:'',endpoint:'https://bigmodel.cn/api/biz/account/query-customer-account-report',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.balance',availableBalancePath:'data.availableBalance',rechargePath:'data.rechargeAmount',giftPath:'data.giveAmount',creditPath:'data.creditBalance'}},
+  {id:'minimax',name:'MiniMax',apiKey:'',endpoint:'https://www.minimaxi.com/account/query_balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'available_amount',cashPath:'cash_balance',voucherPath:'voucher_balance',creditPath:'credit_balance',owedPath:'owed_amount'}},
+  {id:'volcengine',name:'火山引擎 / 豆包',apiKey:'',endpoint:'https://ark.cn-beijing.volces.com/api/v3/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'result.balance',currencyPath:'result.currency'}},
+  {id:'iflytek',name:'讯飞星辰',apiKey:'',apiSecret:'',endpoint:'https://spark-api-open.xf-yun.com/v1/user/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.balance',usedPath:'data.used',totalPath:'data.total'}}
+]
+
+var LABEL_MAP = {voucher:'代金券',cash:'现金',credit:'授信',chargeBalance:'充值余额',availableBalance:'可用余额',recharge:'充值',gift:'赠送',owed:'欠费',type:'类型',used:'已用',total:'总额',name:'用户',currency:'货币'}
+var STATUS_MAP = {ok:'正常',low:'不足',exhausted:'已耗尽',unknown:'未知',error:'错误'}
+
+// State
+var providers = []
+var cards = []
+var editProvId = ''
+
+// ==================== Proxy API ====================
+function callApi(prov) {
+  var authVal = 'Bearer ' + (prov.apiKey || '')
+  return fetch('/api/proxy?url=' + encodeURIComponent(prov.endpoint), {
+    method: prov.method || 'GET',
+    headers: { 'X-Auth': authVal }
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    return r.json()
+  })
+}
+
+// ==================== Storage ====================
+function save() {
+  try { localStorage.setItem('apiusage_providers', JSON.stringify(providers)) } catch(e) {}
+  try { localStorage.setItem('apiusage_cards', JSON.stringify(cards)) } catch(e) {}
+  // 同步保存排序
+  try { localStorage.setItem('apiusage_cards_order', JSON.stringify(cards.map(function(c) { return c.id }))) } catch(e) {}
+}
+function load() {
+  try { providers = JSON.parse(localStorage.getItem('apiusage_providers') || '[]') } catch(e) { providers = [] }
+  try { cards = JSON.parse(localStorage.getItem('apiusage_cards') || '[]') } catch(e) { cards = [] }
+}
+
+// ==================== Render ====================
+function renderAll() {
+  var active = providers.filter(function(p) { return p.apiKey && p.apiKey.trim() })
+  document.getElementById('countText').textContent = '已配置: ' + active.length + ' 家'
+
+  var list = document.getElementById('cardList')
+  var empty = document.getElementById('emptyState')
+
+  if (active.length === 0) {
+    list.classList.add('hidden')
+    empty.classList.remove('hidden')
+  } else {
+    empty.classList.add('hidden')
+    list.classList.remove('hidden')
+  }
+
+  list.innerHTML = cards.map(function(c, idx) {
+    var statusCls = 'status-' + (c.status || 'unknown')
+    var detailRows = (c.extraRows || []).map(function(r) {
+      return '<span class="detail-item"><span class="dl">' + esc(r.label) + '</span> <span class="dv">' + esc(r.value) + '</span></span>'
+    })
+
+    // 智谱 Coding Plan 用量作为 detail-item 与 extraRows 合并显示
+    if (c.codingPlan) {
+      var cp = c.codingPlan
+      if (cp.fiveHour) {
+        var cls5 = cp.fiveHour.pct <= 50 ? 'ok' : cp.fiveHour.pct <= 80 ? 'warn' : 'high'
+        detailRows.push('<span class="detail-item cp-item"><span class="dl">5h</span> <span class="dv ' + cls5 + '">' + Math.round(cp.fiveHour.pct) + '%</span></span>')
+      }
+      if (cp.weekly) {
+        var cls7 = cp.weekly.pct <= 50 ? 'ok' : cp.weekly.pct <= 80 ? 'warn' : 'high'
+        detailRows.push('<span class="detail-item cp-item"><span class="dl">7d</span> <span class="dv ' + cls7 + '">' + Math.round(cp.weekly.pct) + '%</span></span>')
+      }
+    }
+
+    var detailHtml = detailRows.join('')
+
+    return '<div class="card" draggable="true" data-idx="' + idx + '" data-id="' + esc(c.id) + '">' +
+      '<div class="card-main">' +
+        '<span class="drag-handle" onclick="event.stopPropagation()" title="拖拽排序">⋮⋮</span>' +
+        '<div class="card-body">' +
+          '<div class="card-name-row">' +
+            '<span class="card-name">' + esc(c.name) + '</span>' +
+            '<span class="card-status ' + statusCls + '">' + (c.statusLabel || '') + '</span>' +
+          '</div>' +
+          (detailHtml ? '<div class="card-detail-info">' + detailHtml + '</div>' : '') +
+        '</div>' +
+        '<span class="card-balance">' + esc(c.balanceText || '—') + '</span>' +
+        '<div class="card-btns">' +
+          '<button class="btn-refresh" onclick="event.stopPropagation();refreshOne(\'' + esc(c.id) + '\')">刷新</button>' +
+          '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
+          '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
+        '</div>' +
+      '</div></div>'
+  }).join('')
+
+  // 绑定拖拽事件
+  bindDragEvents(list)
+}
+
+// ==================== Drag & Drop ====================
+var dragSrcIdx = -1
+
+function bindDragEvents(list) {
+  var cards = list.querySelectorAll('.card')
+  for (var i = 0; i < cards.length; i++) {
+    cards[i].addEventListener('dragstart', onDragStart)
+    cards[i].addEventListener('dragover', onDragOver)
+    cards[i].addEventListener('dragleave', onDragLeave)
+    cards[i].addEventListener('drop', onDrop)
+    cards[i].addEventListener('dragend', onDragEnd)
+  }
+}
+
+function onDragStart(e) {
+  dragSrcIdx = parseInt(this.getAttribute('data-idx'))
+  this.classList.add('dragging')
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('text/plain', '')
+}
+
+function onDragOver(e) {
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'move'
+  var idx = parseInt(this.getAttribute('data-idx'))
+  if (idx !== dragSrcIdx) {
+    this.classList.add('drag-over')
+  }
+}
+
+function onDragLeave(e) {
+  this.classList.remove('drag-over')
+}
+
+function onDrop(e) {
+  e.preventDefault()
+  this.classList.remove('drag-over')
+  var dstIdx = parseInt(this.getAttribute('data-idx'))
+  if (dstIdx !== dragSrcIdx && dragSrcIdx >= 0) {
+    // reorder cards array
+    var moved = cards.splice(dragSrcIdx, 1)[0]
+    cards.splice(dstIdx, 0, moved)
+    save()
+    renderAll()
+  }
+}
+
+function onDragEnd(e) {
+  this.classList.remove('dragging')
+  dragSrcIdx = -1
+  var allCards = document.querySelectorAll('.card')
+  for (var i = 0; i < allCards.length; i++) {
+    allCards[i].classList.remove('drag-over')
+  }
+}
+
+function loadCardOrder() {
+  applyCardOrder()
+}
+
+function applyCardOrder() {
+  try {
+    var order = JSON.parse(localStorage.getItem('apiusage_cards_order') || '[]')
+    if (order.length && cards.length) {
+      var map = {}
+      for (var i = 0; i < cards.length; i++) { map[cards[i].id] = cards[i] }
+      var ordered = []
+      for (var j = 0; j < order.length; j++) {
+        if (map[order[j]]) ordered.push(map[order[j]])
+      }
+      // 追加不在排序记录中的卡片（新添加的）
+      for (var k = 0; k < cards.length; k++) {
+        if (order.indexOf(cards[k].id) === -1) ordered.push(cards[k])
+      }
+      cards = ordered
+    }
+  } catch(e) {}
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+// ==================== Refresh ====================
+function refreshAll() {
+  var active = providers.filter(function(p) { return p.apiKey && p.apiKey.trim() })
+  if (!active.length) return
+
+  document.getElementById('refreshBar').classList.remove('hidden')
+  var promises = active.map(function(p) {
+    return callApi(p).then(function(data) { return buildCard(p, data) })
+      .catch(function(e) { return { id:p.id, name:p.name, status:'error', statusLabel:'错误', balanceText:e.message||'失败', extraRows:[], lastUpdate:Date.now() } })
+  })
+
+  Promise.all(promises).then(function(results) {
+    cards = results
+    applyCardOrder()  // 恢复用户拖拽排序
+    // 为智谱并行查询 Coding Plan
+    var cpPromises = []
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].id === 'zhipu') {
+        cpPromises.push(queryZhipuCodingPlan(cards[i]))
+      }
+    }
+    if (cpPromises.length) {
+      Promise.all(cpPromises).then(function() {
+        save()
+        renderAll()
+        document.getElementById('refreshBar').classList.add('hidden')
+      })
+    } else {
+      save()
+      renderAll()
+      document.getElementById('refreshBar').classList.add('hidden')
+    }
+  })
+}
+
+function refreshOne(id) {
+  var p = findProv(id)
+  if (!p) return
+  callApi(p).then(function(data) {
+    var card = buildCard(p, data)
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].id === id) { cards.splice(i, 1, card); break }
+    }
+    save()
+    renderAll()
+    // 智谱额外查询 Coding Plan
+    if (id === 'zhipu') {
+      queryZhipuCodingPlan(card).then(function() { save(); renderAll() })
+    }
+  }).catch(function(e) { alert('刷新失败: ' + e.message) })
+}
+
+// ==================== 智谱 Coding Plan ====================
+function queryZhipuCodingPlan(card) {
+  var p = findProv('zhipu')
+  if (!p) return Promise.resolve()
+
+  return fetch('/api/proxy?url=' + encodeURIComponent('https://open.bigmodel.cn/api/monitor/usage/quota/limit'), {
+    method: 'GET',
+    headers: {
+      'X-Auth-Raw': p.apiKey,
+      'X-Accept-Lang': 'en-US,en'
+    }
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    return r.json()
+  }).then(function(data) {
+    card.codingPlan = parseZhipuCpData(data)
+  }).catch(function() {
+    // Coding Plan 查询失败不影响余额显示
+    card.codingPlan = null
+  })
+}
+
+function parseZhipuCpData(json) {
+  if (!json.success || !json.data || !json.data.limits) return null
+  var limits = json.data.limits
+  var result = {}
+  for (var i = 0; i < limits.length; i++) {
+    var item = limits[i]
+    if (item.type !== 'TOKENS_LIMIT') continue
+    var pct = Number(item.percentage) || 0
+    var remaining = ''
+    if (item.nextResetTime) {
+      var resetMs = Number(item.nextResetTime)
+      if (resetMs < 1e12) resetMs *= 1000 // 秒 → 毫秒
+      remaining = formatRemaining(resetMs - Date.now())
+    }
+    if (item.unit === 3) {
+      result.fiveHour = { pct: pct, remaining: remaining }
+    } else if (item.unit === 6) {
+      result.weekly = { pct: pct, remaining: remaining }
+    }
+  }
+  return result
+}
+
+function formatRemaining(ms) {
+  if (ms <= 0) return '即将重置'
+  var seconds = Math.floor(ms / 1000)
+  var minutes = Math.floor(seconds / 60)
+  var hours = Math.floor(minutes / 60)
+  var days = Math.floor(hours / 24)
+  hours = hours % 24
+  minutes = minutes % 60
+  if (days > 0) return days + 'd' + (hours > 0 ? hours + 'h' : '')
+  if (hours > 0) return hours + 'h' + (minutes > 0 ? minutes + 'm' : '')
+  return minutes + 'm'
+}
+
+// ==================== Card Builder ====================
+function buildCard(prov, raw) {
+  var mapping = prov.responseMapping || {}
+  var balance = getPath(raw, mapping.balancePath)
+  if (balance !== null && balance !== undefined) balance = Number(balance)
+  var currency = getPath(raw, mapping.currencyPath) || 'CNY'
+
+  var display = balance === null || balance === undefined ? '—'
+    : (currency === 'CNY' ? '¥' : currency === 'USD' ? '$' : '') + balance.toFixed(2)
+
+  var status = balance === null ? 'unknown' : balance <= 0 ? 'exhausted' : balance < 10 ? 'low' : 'ok'
+
+  var rows = []
+  var skipKeys = {balancePath:1,currencyPath:1}
+  for (var key in mapping) {
+    if (skipKeys[key]) continue
+    var val = getPath(raw, mapping[key])
+    if (val !== null && val !== undefined) {
+      rows.push({label: LABEL_MAP[key.replace('Path','')] || key.replace('Path',''), value: String(val)})
+    }
+  }
+
+  // 保留已有的 codingPlan 数据（避免余额查询结果覆盖 Coding Plan 数据）
+  var existingCard = cards.find(function(c) { return c.id === prov.id })
+  var existingCp = existingCard ? existingCard.codingPlan : null
+
+  return { id:prov.id, name:prov.name, status:status, statusLabel:STATUS_MAP[status], balanceText:display, extraRows:rows, lastUpdate:Date.now(), codingPlan: existingCp }
+}
+
+function getPath(obj, path) {
+  if (!path || !obj) return null
+  var segs = path.split('.')
+  var cur = obj
+  for (var i = 0; i < segs.length; i++) {
+    var s = segs[i]
+    var m = s.match(/^(.+?)\[(\d+)\]$/)
+    if (m) { if (!Array.isArray(cur[m[1]])) return null; cur = cur[m[1]][parseInt(m[2])] }
+    else { if (cur[s] === undefined) return null; cur = cur[s] }
+  }
+  return cur
+}
+
+// ==================== Add ====================
+function openAdd() {
+  var active = providers.filter(function(p) { return p.apiKey && p.apiKey.trim() })
+  var existingIds = active.map(function(p) { return p.id })
+  var avail = TEMPLATES.filter(function(t) { return existingIds.indexOf(t.id) === -1 })
+
+  document.getElementById('addScroll').innerHTML = avail.map(function(t) {
+    return '<div class="add-item" id="aitem-' + t.id + '">' +
+      '<div class="add-item-row" onclick="toggleCheck(\'' + t.id + '\')">' +
+        '<div class="cb" id="cb-' + t.id + '"></div>' +
+        '<span class="add-item-name">' + esc(t.name) + '</span>' +
+      '</div>' +
+      '<div class="add-key-area" id="keyarea-' + t.id + '">' +
+        '<input id="key-' + t.id + '" placeholder="API KEY" oninput="onAddInput(\'' + t.id + '\')">' +
+        (t.authType === 'hmac' ? '<input id="secret-' + t.id + '" placeholder="API Secret" oninput="onAddInput(\'' + t.id + '\')">' : '') +
+      '</div></div>'
+  }).join('')
+
+  document.getElementById('addModal').classList.remove('hidden')
+}
+
+function toggleCheck(id) {
+  var cb = document.getElementById('cb-' + id)
+  var area = document.getElementById('keyarea-' + id)
+  if (cb.classList.contains('checked')) {
+    cb.classList.remove('checked')
+    cb.textContent = ''
+    area.classList.remove('show')
+  } else {
+    cb.classList.add('checked')
+    cb.textContent = '✓'
+    area.classList.add('show')
+  }
+}
+
+function onAddInput(id) { /* value binding via dom */ }
+
+function confirmAdd() {
+  var checked = document.querySelectorAll('.add-scroll .cb.checked')
+  if (!checked.length) { alert('请至少选择一个供应商'); return }
+
+  var added = false
+  checked.forEach(function(cb) {
+    var id = cb.id.replace('cb-','')
+    var keyInput = document.getElementById('key-' + id)
+    var key = keyInput ? keyInput.value.trim() : ''
+    if (!key) { alert('请填写 API KEY'); return }
+
+    var tpl = TEMPLATES.find(function(t) { return t.id === id })
+    if (!tpl) return
+
+    var existing = providers.find(function(p) { return p.id === id })
+    if (existing) {
+      existing.apiKey = key
+      existing.apiSecret = (document.getElementById('secret-' + id) || {}).value || ''
+    } else {
+      var copy = JSON.parse(JSON.stringify(tpl))
+      copy.apiKey = key
+      copy.apiSecret = (document.getElementById('secret-' + id) || {}).value || ''
+      providers.push(copy)
+    }
+    added = true
+  })
+
+  if (added) { save(); closePanel('addModal'); refreshAll() }
+}
+
+// ==================== Import ====================
+function openImport() {
+  var tpl = JSON.stringify({providers:TEMPLATES}, null, 2)
+  document.getElementById('importTextarea').value = tpl
+  document.getElementById('importError').classList.remove('show')
+  document.getElementById('importModal').classList.remove('hidden')
+}
+
+function loadTemplate() {
+  document.getElementById('importTextarea').value = JSON.stringify({providers:TEMPLATES}, null, 2)
+}
+
+function confirmImport() {
+  var el = document.getElementById('importTextarea')
+  var err = document.getElementById('importError')
+  try {
+    var data = JSON.parse(el.value)
+    if (!data.providers || !Array.isArray(data.providers)) { err.textContent = '格式错误：需要 providers 数组'; err.classList.add('show'); return }
+
+    var validIds = TEMPLATES.map(function(t) { return t.id })
+    for (var i = 0; i < data.providers.length; i++) {
+      if (validIds.indexOf(data.providers[i].id) === -1) { err.textContent = '未知供应商: ' + data.providers[i].id; err.classList.add('show'); return }
+    }
+
+    data.providers.forEach(function(imp) {
+      var existing = providers.find(function(p) { return p.id === imp.id })
+      if (existing) {
+        existing.apiKey = imp.apiKey || ''
+        existing.apiSecret = imp.apiSecret || ''
+      } else {
+        var tpl = TEMPLATES.find(function(t) { return t.id === imp.id })
+        if (tpl) {
+          var copy = JSON.parse(JSON.stringify(tpl))
+          copy.apiKey = imp.apiKey || ''
+          copy.apiSecret = imp.apiSecret || ''
+          providers.push(copy)
+        }
+      }
+    })
+
+    save(); closePanel('importModal'); refreshAll()
+  } catch(e) { err.textContent = 'JSON 格式错误: ' + e.message; err.classList.add('show') }
+}
+
+// ==================== Edit ====================
+function editOne(id) {
+  var p = findProv(id); if (!p) return
+  editProvId = id
+  document.getElementById('editTitle').textContent = '编辑 ' + p.name
+  document.getElementById('editKeyInput').value = p.apiKey || ''
+  document.getElementById('editModal').classList.remove('hidden')
+
+  if (p.authType === 'hmac') {
+    document.getElementById('editSecretInput').style.display = 'block'
+    document.getElementById('editSecretInput').value = p.apiSecret || ''
+  } else {
+    document.getElementById('editSecretInput').style.display = 'none'
+  }
+}
+
+function saveEdit() {
+  var p = findProv(editProvId); if (!p) return
+  p.apiKey = document.getElementById('editKeyInput').value.trim()
+  p.apiSecret = document.getElementById('editSecretInput').value.trim()
+  save(); closePanel('editModal'); refreshAll()
+}
+
+function deleteOne(id) {
+  if (!confirm('确定移除该供应商？')) return
+  var p = findProv(id); if (p) { p.apiKey = ''; p.apiSecret = '' }
+  cards = cards.filter(function(c) { return c.id !== id })
+  save(); renderAll()
+}
+
+// ==================== Helpers ====================
+function findProv(id) { return providers.find(function(p) { return p.id === id }) }
+function closePanel(id) { document.getElementById(id).classList.add('hidden') }
+
+// ==================== Init ====================
+document.addEventListener('DOMContentLoaded', function() {
+  load()
+  loadCardOrder()
+  if (cards.length) renderAll()
+  if (providers.filter(function(p) { return p.apiKey && p.apiKey.trim() }).length) {
+    refreshAll()
+  }
+
+  // Register service worker for PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(function() {})
+  }
+})
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+<script>
+export default {
+  onCreate() {
+    // 应用启动
+  }
+}
+</script>

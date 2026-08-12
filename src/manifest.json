@@ -1,0 +1,42 @@
+{
+  "package": "com.apiusage.app",
+  "name": "API用量",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "minPlatformVersion": 1070,
+  "icon": "/assets/refresh.svg",
+  "features": [
+    { "name": "system.fetch" },
+    { "name": "system.storage" },
+    { "name": "system.clipboard" },
+    { "name": "system.prompt" },
+    { "name": "system.shortcut" },
+    { "name": "system.router" }
+  ],
+  "permissions": [
+    { "origin": "*" }
+  ],
+  "config": {
+    "logLevel": "off",
+    "designWidth": 750
+  },
+  "router": {
+    "entry": "pages/index",
+    "pages": {
+      "pages/index": {
+        "component": "index"
+      }
+    }
+  },
+  "display": {
+    "titleBarBackgroundColor": "#ffffff",
+    "titleBarTextColor": "#1a1a1a",
+    "menu": false,
+    "pages": {
+      "pages/index": {
+        "titleBarText": "API 用量"
+      }
+    }
+  },
+  "deviceTypeList": ["phone"]
+}
