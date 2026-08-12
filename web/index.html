@@ -726,8 +726,10 @@ document.addEventListener('DOMContentLoaded', function() {
   })
 
   // Register service worker for PWA
+  // 带 ?v= 版本号绕过 GitHub Pages 对 sw.js 的 max-age=600 缓存，
+  // 确保 sw.js 改动后浏览器能立即检测更新（改 sw.js 时同步递增此版本号）
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(function() {})
+    navigator.serviceWorker.register('sw.js?v=3').catch(function() {})
     // 页面加载时若已被 SW 控制，则监听新 SW 接管并自动刷新，
     // 让用户无感地拿到最新版（首次注册无 controller，不会触发刷新）
     if (navigator.serviceWorker.controller) {
