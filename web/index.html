@@ -174,8 +174,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <div class="modal-mask hidden" id="editModal">
     <div class="modal-panel edit-panel">
       <span class="modal-title" id="editTitle" style="margin-bottom:14px;display:block">编辑</span>
-      <input id="editKeyInput" placeholder="API KEY" style="margin-bottom:8px">
-      <input id="editSecretInput" placeholder="API Secret（仅讯飞需要）" style="display:none;margin-bottom:8px">
+      <input id="editNameInput" placeholder="名称">
+      <input id="editEndpointInput" placeholder="API 地址">
+      <input id="editKeyInput" placeholder="API KEY">
+      <input id="editSecretInput" placeholder="API Secret（仅讯飞需要）" style="display:none">
       <div class="modal-footer" style="padding:12px 0 0;border:none">
         <button class="btn-cancel" onclick="closePanel('editModal')">取消</button>
         <button class="btn-confirm" onclick="saveEdit()">保存</button>
@@ -663,6 +665,8 @@ function editOne(id) {
   var p = findProv(id); if (!p) return
   editProvId = id
   document.getElementById('editTitle').textContent = '编辑 ' + p.name
+  document.getElementById('editNameInput').value = p.name || ''
+  document.getElementById('editEndpointInput').value = p.endpoint || ''
   document.getElementById('editKeyInput').value = p.apiKey || ''
   document.getElementById('editModal').classList.remove('hidden')
 
@@ -676,8 +680,15 @@ function editOne(id) {
 
 function saveEdit() {
   var p = findProv(editProvId); if (!p) return
+  // 名称与 API 地址留空则保留原值，防止误清空
+  p.name = document.getElementById('editNameInput').value.trim() || p.name
+  p.endpoint = document.getElementById('editEndpointInput').value.trim() || p.endpoint
   p.apiKey = document.getElementById('editKeyInput').value.trim()
   p.apiSecret = document.getElementById('editSecretInput').value.trim()
+  // 同步更新当前卡片名称，避免刷新前仍显示旧名
+  for (var i = 0; i < cards.length; i++) {
+    if (cards[i].id === editProvId) { cards[i].name = p.name; break }
+  }
   save(); closePanel('editModal'); refreshAll()
 }
 
