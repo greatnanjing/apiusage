@@ -47,11 +47,11 @@
         <div class="card-detail" show="{{ card.expanded }}">
           <!-- 智谱 Coding Plan 用量（与 web 版一致） -->
           <div class="detail-row" show="{{ card.cp5Show }}">
-            <text class="detail-label">Coding Plan 5h</text>
+            <text class="detail-label">Coding Plan 5小时:</text>
             <text class="detail-value {{ card.cp5Cls }}">{{ card.cp5Text }}</text>
           </div>
           <div class="detail-row" show="{{ card.cp7Show }}">
-            <text class="detail-label">Coding Plan 7d</text>
+            <text class="detail-label">Coding Plan 7天:</text>
             <text class="detail-value {{ card.cp7Cls }}">{{ card.cp7Text }}</text>
           </div>
           <div class="detail-row" for="row in card.extraRows">

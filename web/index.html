@@ -287,11 +287,11 @@ function renderAll() {
       var cpItems = []
       if (cp.fiveHour) {
         var cls5 = cp.fiveHour.pct <= 50 ? 'ok' : cp.fiveHour.pct <= 80 ? 'warn' : 'high'
-        cpItems.push('<span class="detail-item cp-item"><span class="dl">5h</span> <span class="dv ' + cls5 + '">' + Math.round(cp.fiveHour.pct) + '%</span>' + (cp.fiveHour.remaining ? ' <span class="dt">◷' + esc(cp.fiveHour.remaining) + '</span>' : '') + '</span>')
+        cpItems.push('<span class="detail-item cp-item"><span class="dl">5小时:</span> <span class="dv ' + cls5 + '">' + Math.round(cp.fiveHour.pct) + '%</span>' + (cp.fiveHour.remaining ? ' <span class="dt">◷' + esc(cp.fiveHour.remaining) + '</span>' : '') + '</span>')
       }
       if (cp.weekly) {
         var cls7 = cp.weekly.pct <= 50 ? 'ok' : cp.weekly.pct <= 80 ? 'warn' : 'high'
-        cpItems.push('<span class="detail-item cp-item"><span class="dl">7d</span> <span class="dv ' + cls7 + '">' + Math.round(cp.weekly.pct) + '%</span>' + (cp.weekly.remaining ? ' <span class="dt">◷' + esc(cp.weekly.remaining) + '</span>' : '') + '</span>')
+        cpItems.push('<span class="detail-item cp-item"><span class="dl">7天:</span> <span class="dv ' + cls7 + '">' + Math.round(cp.weekly.pct) + '%</span>' + (cp.weekly.remaining ? ' <span class="dt">◷' + esc(cp.weekly.remaining) + '</span>' : '') + '</span>')
       }
       if (cpItems.length) cpRow = '<div class="card-detail-info">' + cpItems.join('') + '</div>'
     }
