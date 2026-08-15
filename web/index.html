@@ -50,7 +50,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card-status{font-size:11px}
 .status-ok{color:#4caf50}.status-low{color:#ff9800}.status-exhausted{color:#f44336}.status-unknown{color:#999}.status-error{color:#f44336}
 .card-balance{font-size:16px;font-weight:700;color:#1a1a1a;text-align:right;white-space:nowrap}
-.card-detail-info{margin-top:4px;display:flex;flex-wrap:wrap;gap:2px 14px}
+.card-detail-info{margin-top:3px;margin-left:26px;display:flex;flex-wrap:wrap;gap:2px 14px}
 .detail-item{font-size:11px;color:#888}
 .detail-item .dl{color:#888}.detail-item .dv{color:#555}
 .detail-item.cp-item .dv{font-weight:600}
@@ -280,17 +280,20 @@ function renderAll() {
       return '<span class="detail-item"><span class="dl">' + esc(r.label) + '</span> <span class="dv">' + esc(r.value) + '</span></span>'
     })
 
-    // 智谱 Coding Plan 用量作为 detail-item 与 extraRows 合并显示
+    // 智谱 Coding Plan 用量单独一行显示
+    var cpRow = ''
     if (c.codingPlan) {
       var cp = c.codingPlan
+      var cpItems = []
       if (cp.fiveHour) {
         var cls5 = cp.fiveHour.pct <= 50 ? 'ok' : cp.fiveHour.pct <= 80 ? 'warn' : 'high'
-        detailRows.push('<span class="detail-item cp-item"><span class="dl">5h</span> <span class="dv ' + cls5 + '">' + Math.round(cp.fiveHour.pct) + '%</span>' + (cp.fiveHour.remaining ? ' <span class="dt">◷' + esc(cp.fiveHour.remaining) + '</span>' : '') + '</span>')
+        cpItems.push('<span class="detail-item cp-item"><span class="dl">5h</span> <span class="dv ' + cls5 + '">' + Math.round(cp.fiveHour.pct) + '%</span>' + (cp.fiveHour.remaining ? ' <span class="dt">◷' + esc(cp.fiveHour.remaining) + '</span>' : '') + '</span>')
       }
       if (cp.weekly) {
         var cls7 = cp.weekly.pct <= 50 ? 'ok' : cp.weekly.pct <= 80 ? 'warn' : 'high'
-        detailRows.push('<span class="detail-item cp-item"><span class="dl">7d</span> <span class="dv ' + cls7 + '">' + Math.round(cp.weekly.pct) + '%</span>' + (cp.weekly.remaining ? ' <span class="dt">◷' + esc(cp.weekly.remaining) + '</span>' : '') + '</span>')
+        cpItems.push('<span class="detail-item cp-item"><span class="dl">7d</span> <span class="dv ' + cls7 + '">' + Math.round(cp.weekly.pct) + '%</span>' + (cp.weekly.remaining ? ' <span class="dt">◷' + esc(cp.weekly.remaining) + '</span>' : '') + '</span>')
       }
+      if (cpItems.length) cpRow = '<div class="card-detail-info">' + cpItems.join('') + '</div>'
     }
 
     var detailHtml = detailRows.join('')
@@ -303,7 +306,6 @@ function renderAll() {
             '<span class="card-name">' + esc(c.name) + '</span>' +
             '<span class="card-status ' + statusCls + '">' + (c.statusLabel || '') + '</span>' +
           '</div>' +
-          (detailHtml ? '<div class="card-detail-info">' + detailHtml + '</div>' : '') +
         '</div>' +
         '<span class="card-balance">' + esc(c.balanceText || '—') + '</span>' +
         '<div class="card-btns">' +
@@ -311,7 +313,10 @@ function renderAll() {
           '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
           '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
         '</div>' +
-      '</div></div>'
+      '</div>' +
+      (detailHtml ? '<div class="card-detail-info">' + detailHtml + '</div>' : '') +
+      cpRow +
+      '</div>'
   }).join('')
 
   // 绑定拖拽事件
