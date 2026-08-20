@@ -311,7 +311,7 @@ function renderAll() {
         '</div>' +
         '<div class="card-balance-wrap">' +
           '<span class="card-balance">' + esc(c.balanceText || '—') + '</span>' +
-          (c.lastUpdate ? '<div class="card-update" data-last-update="' + c.lastUpdate + '">' + timeAgo(c.lastUpdate) + '</div>' : '') +
+          (c.lastUpdate ? '<div class="card-update" data-last-update="' + esc(c.lastUpdate) + '">' + timeAgo(c.lastUpdate) + '</div>' : '') +
         '</div>' +
         '<div class="card-btns">' +
           '<button class="btn-refresh" onclick="event.stopPropagation();refreshOne(\'' + esc(c.id) + '\')">刷新</button>' +
