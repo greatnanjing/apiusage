@@ -80,8 +80,14 @@ function proxyRequest(req, res) {
 
 // Serve static files
 function serveStatic(req, res) {
-  let filePath = req.url === '/' ? '/index.html' : req.url
+  let filePath = (req.url === '/' ? '/index.html' : req.url).split('?')[0]
   filePath = path.join(__dirname, filePath)
+
+  // 防路径穿越：解析后的绝对路径必须仍位于 web/ 目录内
+  if (!filePath.startsWith(__dirname + path.sep)) {
+    res.writeHead(403)
+    return res.end('Forbidden')
+  }
 
   const ext = path.extname(filePath)
   const mime = MIME[ext] || 'application/octet-stream'
