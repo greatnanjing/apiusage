@@ -50,6 +50,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card-status{font-size:11px}
 .status-ok{color:#4caf50}.status-low{color:#ff9800}.status-exhausted{color:#f44336}.status-unknown{color:#999}.status-error{color:#f44336}
 .card-balance{font-size:16px;font-weight:700;color:#1a1a1a;text-align:right;white-space:nowrap}
+.card-balance-wrap{display:flex;flex-direction:column;align-items:flex-end}
+.card-update{font-size:10px;color:#bbb;margin-top:2px}
 .card-detail-info{margin-top:3px;margin-left:26px;display:flex;flex-wrap:wrap;gap:2px 14px}
 .detail-item{font-size:11px;color:#888}
 .detail-item .dl{color:#888}.detail-item .dv{color:#555}
@@ -307,7 +309,10 @@ function renderAll() {
             '<span class="card-status ' + statusCls + '">' + (c.statusLabel || '') + '</span>' +
           '</div>' +
         '</div>' +
-        '<span class="card-balance">' + esc(c.balanceText || '—') + '</span>' +
+        '<div class="card-balance-wrap">' +
+          '<span class="card-balance">' + esc(c.balanceText || '—') + '</span>' +
+          (c.lastUpdate ? '<div class="card-update" data-last-update="' + c.lastUpdate + '">' + timeAgo(c.lastUpdate) + '</div>' : '') +
+        '</div>' +
         '<div class="card-btns">' +
           '<button class="btn-refresh" onclick="event.stopPropagation();refreshOne(\'' + esc(c.id) + '\')">刷新</button>' +
           '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
@@ -403,6 +408,20 @@ function applyCardOrder() {
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+function timeAgo(ts) {
+  var diff = Date.now() - ts
+  if (diff < 60000) return '刚刚'
+  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
+  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前'
+  return Math.floor(diff / 86400000) + '天前'
+}
+function updateTimeAgoTexts() {
+  var els = document.querySelectorAll('[data-last-update]')
+  for (var i = 0; i < els.length; i++) {
+    els[i].textContent = timeAgo(parseInt(els[i].getAttribute('data-last-update'), 10))
+  }
+}
 
 // ==================== Refresh ====================
 function refreshAll() {
@@ -723,6 +742,9 @@ document.addEventListener('DOMContentLoaded', function() {
   load()
   loadCardOrder()
   if (cards.length) renderAll()
+
+  // 相对时间每分钟自动流动（只更新文本，不重渲染卡片，避免打断拖拽）
+  setInterval(updateTimeAgoTexts, 60000)
 
   // 先探测代理是否可用，再发起刷新（静态部署时自动走直连）
   detectProxy().then(function() {
