@@ -43,15 +43,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card{background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:8px;border-left:3px solid #4a90d9;transition:opacity .2s}
 .card.dragging{opacity:.4}
 .card.drag-over{border-top:3px solid #4a90d9}
-.card-main{display:flex;align-items:flex-start;gap:8px}
+.card-main{display:flex;align-items:center;gap:8px}
 .card-body{flex:1;min-width:0}
-.card-name-row{display:flex;align-items:center;gap:8px}
+.card-name-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .card-name{font-size:15px;font-weight:700;color:#1a1a1a}
 .card-status{font-size:11px}
 .status-ok{color:#4caf50}.status-low{color:#ff9800}.status-exhausted{color:#f44336}.status-unknown{color:#999}.status-error{color:#f44336}
-.card-balance{font-size:16px;font-weight:700;color:#1a1a1a;text-align:right;white-space:nowrap}
-.card-balance-wrap{display:flex;flex-direction:column;align-items:flex-end}
-.card-update{font-size:10px;color:#bbb;margin-top:2px}
+.card-balance{font-size:16px;font-weight:700;color:#1a1a1a;white-space:nowrap}
+.card-update{font-size:10px;color:#bbb;white-space:nowrap;flex-shrink:0}
 .card-detail-info{margin-top:3px;margin-left:26px;display:flex;flex-wrap:wrap;gap:2px 14px}
 .detail-item{font-size:11px;color:#888}
 .detail-item .dl{color:#888}.detail-item .dv{color:#555}
@@ -61,6 +60,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .detail-item.cp-item .dv.high{color:#f44336}
 .detail-item.cp-item .dt{color:#aaa}
 .card-btns{display:flex;gap:4px;flex-shrink:0;align-items:flex-start}
+/* 第二排操作按钮（编辑/删除），右对齐、避开拖拽把手列 */
+.card-btns-row2{justify-content:flex-end;flex-shrink:1;margin:4px 0 0 26px}
 .card-btns button{border:none;padding:4px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
 .card-btns button:active{opacity:.8}
 .btn-refresh{background:#f0f0f0;color:#555}
@@ -307,17 +308,17 @@ function renderAll() {
           '<div class="card-name-row">' +
             '<span class="card-name">' + esc(c.name) + '</span>' +
             '<span class="card-status ' + statusCls + '">' + (c.statusLabel || '') + '</span>' +
+            '<span class="card-balance">' + esc(c.balanceText || '—') + '</span>' +
           '</div>' +
         '</div>' +
-        '<div class="card-balance-wrap">' +
-          '<span class="card-balance">' + esc(c.balanceText || '—') + '</span>' +
-          (c.lastUpdate ? '<div class="card-update" data-last-update="' + esc(c.lastUpdate) + '">' + timeAgo(c.lastUpdate) + '</div>' : '') +
-        '</div>' +
+        (c.lastUpdate ? '<span class="card-update" data-last-update="' + esc(c.lastUpdate) + '">' + timeAgo(c.lastUpdate) + '</span>' : '') +
         '<div class="card-btns">' +
           '<button class="btn-refresh" onclick="event.stopPropagation();refreshOne(\'' + esc(c.id) + '\')">刷新</button>' +
-          '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
-          '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
         '</div>' +
+      '</div>' +
+      '<div class="card-btns card-btns-row2">' +
+        '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
+        '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
       '</div>' +
       (detailHtml ? '<div class="card-detail-info">' + detailHtml + '</div>' : '') +
       cpRow +
