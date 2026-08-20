@@ -61,7 +61,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .detail-item.cp-item .dt{color:#aaa}
 .card-btns{display:flex;gap:4px;flex-shrink:0;align-items:flex-start}
 /* 第二排操作按钮（编辑/删除），右对齐、避开拖拽把手列 */
-.card-btns-row2{justify-content:flex-end;flex-shrink:1;margin:4px 0 0 26px}
+.card-btns-row2{justify-content:flex-end;flex-shrink:1;margin:8px 0 0 26px}
 .card-btns button{border:none;padding:4px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
 .card-btns button:active{opacity:.8}
 .btn-refresh{background:#f0f0f0;color:#555}
@@ -316,12 +316,12 @@ function renderAll() {
           '<button class="btn-refresh" onclick="event.stopPropagation();refreshOne(\'' + esc(c.id) + '\')">刷新</button>' +
         '</div>' +
       '</div>' +
+      (detailHtml ? '<div class="card-detail-info">' + detailHtml + '</div>' : '') +
+      cpRow +
       '<div class="card-btns card-btns-row2">' +
         '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
         '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
       '</div>' +
-      (detailHtml ? '<div class="card-detail-info">' + detailHtml + '</div>' : '') +
-      cpRow +
       '</div>'
   }).join('')
 
