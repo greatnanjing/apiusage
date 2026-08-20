@@ -200,17 +200,11 @@ export default {
     }).then(function (snap) {
       if (snap && snap.results && snap.results.length) {
         self._renderCards(snap.results)
-      }
-      if (self.activeCount > 0) {
+      } else if (self.activeCount > 0) {
+        // 首次无快照时自动刷新兜底；有快照则显示上次数据与其真实更新时间，由用户手动刷新
         self.doRefreshAll()
       }
     })
-  },
-
-  onShow: function () {
-    if (this.activeCount > 0 && !this.refreshing) {
-      this.doRefreshAll()
-    }
   },
 
   // ============ 刷新 ============

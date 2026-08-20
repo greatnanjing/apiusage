@@ -746,9 +746,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // 相对时间每分钟自动流动（只更新文本，不重渲染卡片，避免打断拖拽）
   setInterval(updateTimeAgoTexts, 60000)
 
-  // 先探测代理是否可用，再发起刷新（静态部署时自动走直连）
+  // 先探测代理是否可用（静态部署时自动走直连）。
+  // 仅首次无快照时自动刷新兜底；有快照则显示上次数据与其真实更新时间
+  // （"X分钟/小时/天前"），由用户手动点刷新更新
   detectProxy().then(function() {
-    if (providers.filter(function(p) { return p.apiKey && p.apiKey.trim() }).length) {
+    if (!cards.length && providers.filter(function(p) { return p.apiKey && p.apiKey.trim() }).length) {
       refreshAll()
     }
   })
