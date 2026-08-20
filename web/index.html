@@ -51,7 +51,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .status-ok{color:#4caf50}.status-low{color:#ff9800}.status-exhausted{color:#f44336}.status-unknown{color:#999}.status-error{color:#f44336}
 .card-balance{font-size:16px;font-weight:700;color:#1a1a1a;white-space:nowrap}
 .card-update{font-size:10px;color:#bbb;white-space:nowrap;flex-shrink:0}
-.card-detail-info{margin-top:3px;margin-left:26px;display:flex;flex-wrap:wrap;gap:2px 14px}
+/* 第2排:详情项(左,可换行)+ 编辑/删除按钮(右),同行呈现 */
+.card-row2{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:4px;padding-left:26px}
+.card-row2-detail{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:2px 14px}
+.card-btns{display:flex;gap:4px;flex-shrink:0;align-items:flex-start}
 .detail-item{font-size:11px;color:#888}
 .detail-item .dl{color:#888}.detail-item .dv{color:#555}
 .detail-item.cp-item .dv{font-weight:600}
@@ -59,9 +62,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .detail-item.cp-item .dv.warn{color:#ff9800}
 .detail-item.cp-item .dv.high{color:#f44336}
 .detail-item.cp-item .dt{color:#aaa}
-.card-btns{display:flex;gap:4px;flex-shrink:0;align-items:flex-start}
-/* 第二排操作按钮（编辑/删除），右对齐、避开拖拽把手列 */
-.card-btns-row2{justify-content:flex-end;flex-shrink:1;margin:8px 0 0 26px}
 .card-btns button{border:none;padding:4px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
 .card-btns button:active{opacity:.8}
 .btn-refresh{background:#f0f0f0;color:#555}
@@ -296,7 +296,7 @@ function renderAll() {
         var cls7 = cp.weekly.pct <= 50 ? 'ok' : cp.weekly.pct <= 80 ? 'warn' : 'high'
         cpItems.push('<span class="detail-item cp-item"><span class="dl">7天:</span> <span class="dv ' + cls7 + '">' + Math.round(cp.weekly.pct) + '%</span>' + (cp.weekly.remaining ? ' <span class="dt">◷' + esc(cp.weekly.remaining) + '</span>' : '') + '</span>')
       }
-      if (cpItems.length) cpRow = '<div class="card-detail-info">' + cpItems.join('') + '</div>'
+      if (cpItems.length) cpRow = cpItems.join('')
     }
 
     var detailHtml = detailRows.join('')
@@ -316,11 +316,12 @@ function renderAll() {
           '<button class="btn-refresh" onclick="event.stopPropagation();refreshOne(\'' + esc(c.id) + '\')">刷新</button>' +
         '</div>' +
       '</div>' +
-      (detailHtml ? '<div class="card-detail-info">' + detailHtml + '</div>' : '') +
-      cpRow +
-      '<div class="card-btns card-btns-row2">' +
-        '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
-        '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
+      '<div class="card-row2">' +
+        ((detailHtml || cpRow) ? '<div class="card-row2-detail">' + detailHtml + cpRow + '</div>' : '') +
+        '<div class="card-btns">' +
+          '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
+          '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
+        '</div>' +
       '</div>' +
       '</div>'
   }).join('')
