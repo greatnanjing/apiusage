@@ -144,8 +144,8 @@ function formatLabel(key) {
   color: #1a1a1a;
 }
 .card-update {
-  font-size: 10px;
-  color: #bbb;
+  font-size: 12px;
+  color: #888;
   margin-top: 2px;
 }
 
