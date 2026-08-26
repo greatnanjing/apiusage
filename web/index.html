@@ -266,6 +266,18 @@ function save() {
 function load() {
   try { providers = JSON.parse(localStorage.getItem('apiusage_providers') || '[]') } catch(e) { providers = [] }
   try { cards = JSON.parse(localStorage.getItem('apiusage_cards') || '[]') } catch(e) { cards = [] }
+  // 旧数据迁移：无 uid/tid → uid=id, tid=id, account=''
+  for (var i = 0; i < providers.length; i++) {
+    var p = providers[i]
+    if (!p.uid) { p.uid = p.id || ('p_' + Date.now() + '_' + i); p.tid = p.id || p.uid }
+    else if (!p.tid) p.tid = p.id || p.uid
+    if (p.account === undefined) p.account = ''
+    p.id = p.uid  // 兼容现有代码用 p.id
+  }
+  for (var j = 0; j < cards.length; j++) {
+    if (!cards[j].uid) cards[j].uid = cards[j].id
+    cards[j].id = cards[j].uid
+  }
 }
 
 // ==================== Render ====================
