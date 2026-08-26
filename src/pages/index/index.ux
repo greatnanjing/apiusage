@@ -89,10 +89,10 @@
               <text class="add-item-name">{{ tpl.name }}</text>
             </div>
             <div class="add-key-area" show="{{ tpl.checked }}">
-              <input class="add-input" placeholder="名称（可选）" value="{{ tpl.customName }}" onchange="onAddNameChange"></input>
+              <input class="add-input" placeholder="名称" value="{{ tpl.customName }}" onchange="onAddNameChange"></input>
               <input class="add-input" placeholder="API 地址" value="{{ tpl.endpoint }}" onchange="onAddEndpointChange"></input>
-              <input class="add-input" placeholder="API KEY / PIN" value="{{ tpl.key }}" onchange="onAddKeyChange"></input>
               <input class="add-input" placeholder="账户（手机号）" show="{{ tpl.isSensenova }}" value="{{ tpl.account }}" onchange="onAddAccountChange"></input>
+              <input class="add-input" placeholder="API KEY / PIN" value="{{ tpl.key }}" onchange="onAddKeyChange"></input>
               <input class="add-input" placeholder="API Secret"
                      show="{{ tpl.isHmac }}" value="{{ tpl.secret }}" onchange="onAddSecretChange"></input>
             </div>
@@ -129,8 +129,8 @@
         <text class="modal-title">编辑 {{ editName }}</text>
         <input class="modal-input" placeholder="名称" value="{{ editName }}" onchange="onEditNameChg"></input>
         <input class="modal-input" placeholder="API 地址" value="{{ editEndpoint }}" onchange="onEditEndpointChg" show="{{ !editHideEndpoint }}"></input>
-        <input class="modal-input" placeholder="API KEY" value="{{ editKey }}" onchange="onEditKeyChg"></input>
         <input class="modal-input" placeholder="账户（手机号）" value="{{ editAccount }}" onchange="onEditAccountChg" show="{{ editShowAccount }}"></input>
+        <input class="modal-input" placeholder="API KEY" value="{{ editKey }}" onchange="onEditKeyChg"></input>
         <input class="modal-input" placeholder="API Secret（仅讯飞需要）" show="{{ editHasSecret }}"
                value="{{ editSecret }}" onchange="onEditSecretChg"></input>
         <div class="modal-footer">
@@ -408,7 +408,7 @@ export default {
         checked: false,
         key: '',
         secret: '',
-        customName: '',
+        customName: tpl.name,
         endpoint: tpl.endpoint,
         account: ''
       })

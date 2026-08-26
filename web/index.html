@@ -185,11 +185,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <input id="editNameInput" placeholder="例如 我的 DeepSeek">
       <label class="edit-label" for="editEndpointInput">API 地址</label>
       <input id="editEndpointInput" placeholder="https://api.deepseek.com/user/balance">
+      <label class="edit-label" for="editAccountInput" id="editAccountLabel" style="display:none">账户（手机号，仅商汤）</label>
+      <input id="editAccountInput" placeholder="手机号" style="display:none">
       <label class="edit-label" for="editKeyInput">API KEY</label>
       <input id="editKeyInput" placeholder="sk-...">
       <div id="editKeyHint" class="add-key-hint" style="display:none">手机号+PIN 自动登录（需代理）；或只填 access_token</div>
-      <label class="edit-label" for="editAccountInput" id="editAccountLabel" style="display:none">账户（手机号，仅商汤）</label>
-      <input id="editAccountInput" placeholder="手机号" style="display:none">
       <label class="edit-label" for="editSecretInput" id="editSecretLabel" style="display:none">API Secret（仅讯飞需要）</label>
       <input id="editSecretInput" placeholder="讯飞 API Secret" style="display:none">
       <div class="modal-footer" style="padding:12px 0 0;border:none">
@@ -731,10 +731,11 @@ function openAdd() {
         '<span class="add-item-name">' + esc(t.name) + '</span>' +
       '</div>' +
       '<div class="add-key-area" id="keyarea-' + t.id + '">' +
-        '<input id="name-' + t.id + '" placeholder="名称（默认' + esc(t.name) + '）">' +
+        '<input id="name-' + t.id + '" value="' + esc(t.name) + '" placeholder="名称">' +
         '<input id="endpoint-' + t.id + '" placeholder="API 地址" value="' + esc(t.endpoint) + '">' +
+        (t.id === 'sensenova' ? '<input id="account-' + t.id + '" placeholder="账户（手机号，自动登录）">' : '') +
         '<input id="key-' + t.id + '" placeholder="' + (t.id === 'sensenova' ? 'PIN 或 access_token' : 'API KEY') + '">' +
-        (t.id === 'sensenova' ? '<input id="account-' + t.id + '" placeholder="账户（手机号，自动登录）"><div class="add-key-hint">填手机号+PIN 自动登录（需代理）；或只填 access_token</div>' : '') +
+        (t.id === 'sensenova' ? '<div class="add-key-hint">填手机号+PIN 自动登录（需代理）；或只填 access_token</div>' : '') +
         (t.authType === 'hmac' ? '<input id="secret-' + t.id + '" placeholder="API Secret">' : '') +
       '</div></div>'
   }).join('')
