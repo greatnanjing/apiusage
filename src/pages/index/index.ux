@@ -772,8 +772,8 @@ export default {
 
 .card-detail { margin-top: 10px; border-top: 1px solid #f0f0f0; padding-top: 10px; flex-direction: column; }
 .detail-row { flex-direction: row; justify-content: space-between; padding: 5px 0; }
-.detail-label { font-size: 15px; color: #888; }
-.detail-value { font-size: 15px; color: #333; }
+.detail-label { font-size: 17px; color: #888; }
+.detail-value { font-size: 17px; color: #333; }
 /* Coding Plan 用量颜色档位（与 web 版 cp-item 一致） */
 .cp-ok { color: #4caf50; }
 .cp-warn { color: #ff9800; }
