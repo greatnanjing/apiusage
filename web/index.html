@@ -187,7 +187,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <input id="editEndpointInput" placeholder="https://api.deepseek.com/user/balance">
       <label class="edit-label" for="editKeyInput">API KEY</label>
       <input id="editKeyInput" placeholder="sk-...">
-      <div id="editKeyHint" class="add-key-hint" style="display:none">手机号|PIN 自动登录（需本地代理 server.js）；或粘贴登录后的 access_token</div>
+      <div id="editKeyHint" class="add-key-hint" style="display:none">手机号+PIN 自动登录（需代理）；或只填 access_token</div>
+      <label class="edit-label" for="editAccountInput" id="editAccountLabel" style="display:none">账户（手机号，仅商汤）</label>
+      <input id="editAccountInput" placeholder="手机号" style="display:none">
       <label class="edit-label" for="editSecretInput" id="editSecretLabel" style="display:none">API Secret（仅讯飞需要）</label>
       <input id="editSecretInput" placeholder="讯飞 API Secret" style="display:none">
       <div class="modal-footer" style="padding:12px 0 0;border:none">
@@ -462,23 +464,25 @@ function refreshAll() {
   document.getElementById('refreshBar').classList.remove('hidden')
   var promises = active.map(function(p) {
     // 商汤无单余额值，跳过标准 callApi（避免用"手机号|PIN"当 Bearer 触发 401），由 querySenseNovaUsage 填充
-    if (p.id === 'sensenova') {
-      return Promise.resolve({ id:p.id, name:p.name, status:'unknown', statusLabel:STATUS_MAP['unknown'], balanceText:'—', extraRows:[], lastUpdate:Date.now() })
+    if (p.tid === 'sensenova') {
+      var exC = cards.find(function(x){return x.uid===p.uid})
+      var exSn = exC ? (exC.sensenovaModels||[]) : []
+      return Promise.resolve({ id:p.uid, uid:p.uid, tid:p.tid, name:p.name, status:'unknown', statusLabel:STATUS_MAP['unknown'], balanceText:'—', extraRows:[], sensenovaModels: exSn, lastUpdate:Date.now() })
     }
     return callApi(p).then(function(data) { return buildCard(p, data) })
-      .catch(function(e) { return { id:p.id, name:p.name, status:'error', statusLabel:'错误', balanceText:e.message||'失败', extraRows:[], lastUpdate:Date.now() } })
+      .catch(function(e) { return { id:p.uid, uid:p.uid, tid:p.tid, name:p.name, status:'error', statusLabel:'错误', balanceText:e.message||'失败', extraRows:[], lastUpdate:Date.now() } })
   })
 
   Promise.all(promises).then(function(results) {
     cards = results
     applyCardOrder()  // 恢复用户拖拽排序
-    // 为智谱并行查询 Coding Plan
+    // 为智谱并行查询 Coding Plan、商汤并行查询各模型余量
     var cpPromises = []
     for (var i = 0; i < cards.length; i++) {
-      if (cards[i].id === 'zhipu') {
+      if (cards[i].tid === 'zhipu') {
         cpPromises.push(queryZhipuCodingPlan(cards[i]))
       }
-      if (cards[i].id === 'sensenova') {
+      if (cards[i].tid === 'sensenova') {
         cpPromises.push(querySenseNovaUsage(cards[i]))
       }
     }
@@ -500,10 +504,12 @@ function refreshOne(id) {
   var p = findProv(id)
   if (!p) return
   // 商汤无单余额值，跳过标准 callApi，直接 base card 由 querySenseNovaUsage 填充
-  if (id === 'sensenova') {
-    var snCard = { id:p.id, name:p.name, status:'unknown', statusLabel:STATUS_MAP['unknown'], balanceText:'—', extraRows:[], lastUpdate:Date.now() }
+  if (p.tid === 'sensenova') {
+    var exC = cards.find(function(x){return x.uid===id})
+    var exSn = exC ? (exC.sensenovaModels||[]) : []
+    var snCard = { id:id, uid:id, tid:'sensenova', name:p.name, status:'unknown', statusLabel:STATUS_MAP['unknown'], balanceText:'—', extraRows:[], sensenovaModels: exSn, lastUpdate:Date.now() }
     for (var i = 0; i < cards.length; i++) {
-      if (cards[i].id === id) { cards.splice(i, 1, snCard); break }
+      if (cards[i].uid === id || cards[i].id === id) { cards.splice(i, 1, snCard); break }
     }
     save(); renderAll()
     querySenseNovaUsage(snCard).then(function() { save(); renderAll() })
@@ -512,15 +518,15 @@ function refreshOne(id) {
   callApi(p).then(function(data) {
     var card = buildCard(p, data)
     for (var i = 0; i < cards.length; i++) {
-      if (cards[i].id === id) { cards.splice(i, 1, card); break }
+      if (cards[i].uid === id || cards[i].id === id) { cards.splice(i, 1, card); break }
     }
     save()
     renderAll()
     // 智谱额外查询 Coding Plan；商汤额外查询各模型余量
-    if (id === 'zhipu') {
+    if (p.tid === 'zhipu') {
       queryZhipuCodingPlan(card).then(function() { save(); renderAll() })
     }
-    if (id === 'sensenova') {
+    if (p.tid === 'sensenova') {
       querySenseNovaUsage(card).then(function() { save(); renderAll() })
     }
   }).catch(function(e) { alert('刷新失败: ' + e.message) })
@@ -528,7 +534,7 @@ function refreshOne(id) {
 
 // ==================== 智谱 Coding Plan ====================
 function queryZhipuCodingPlan(card) {
-  var p = findProv('zhipu')
+  var p = findProv(card.uid || card.id)
   if (!p) return Promise.resolve()
 
   var CP_URL = 'https://open.bigmodel.cn/api/monitor/usage/quota/limit'
@@ -588,11 +594,11 @@ function decodeJwtTenantId(token) {
 }
 
 function querySenseNovaUsage(card) {
-  var p = findProv('sensenova')
+  var p = findProv(card.uid || card.id)
   if (!p || !p.apiKey || !p.apiKey.trim()) return Promise.resolve()
-  var key = p.apiKey.trim()
-  // 含 "|" 视为 "手机号|PIN" 自动登录（需代理 server.js）；否则当作 access_token 直用
-  var isAuto = key.indexOf('|') > 0
+  // account 有值 → 自动登录（拼 account|apiKey 即 手机号|PIN）；否则 apiKey 当 access_token
+  var isAuto = !!(p.account && p.account.trim())
+  var key = isAuto ? (p.account.trim() + '|' + p.apiKey.trim()) : p.apiKey.trim()
   var authPromise
   if (isAuto) {
     if (!proxyUsable) {
@@ -611,12 +617,12 @@ function querySenseNovaUsage(card) {
         return { token: d.access_token, tenantId: d.tenant_id }
       })
   } else {
-    var tid = decodeJwtTenantId(key)
-    if (!tid) {
+    var tenantId0 = decodeJwtTenantId(key)
+    if (!tenantId0) {
       card.sensenovaModels = null; card.status = 'error'; card.statusLabel = STATUS_MAP['error']; card.balanceText = 'token 格式无效'
       return Promise.resolve()
     }
-    authPromise = Promise.resolve({ token: key, tenantId: tid })
+    authPromise = Promise.resolve({ token: key, tenantId: tenantId0 })
   }
   var authVal, tenantId
   return authPromise.then(function(auth) {
@@ -695,11 +701,11 @@ function buildCard(prov, raw) {
   }
 
   // 保留已有的 codingPlan / sensenovaModels 数据（避免余额查询结果覆盖附加数据）
-  var existingCard = cards.find(function(c) { return c.id === prov.id })
+  var existingCard = cards.find(function(c) { return c.uid === prov.uid || c.id === prov.id })
   var existingCp = existingCard ? existingCard.codingPlan : null
   var existingSn = existingCard ? existingCard.sensenovaModels : null
 
-  return { id:prov.id, name:prov.name, status:status, statusLabel:STATUS_MAP[status], balanceText:display, extraRows:rows, lastUpdate:Date.now(), codingPlan: existingCp, sensenovaModels: existingSn }
+  return { id:prov.uid, uid:prov.uid, tid:prov.tid, name:prov.name, status:status, statusLabel:STATUS_MAP[status], balanceText:display, extraRows:rows, lastUpdate:Date.now(), codingPlan: existingCp, sensenovaModels: existingSn }
 }
 
 function getPath(obj, path) {
@@ -717,23 +723,21 @@ function getPath(obj, path) {
 
 // ==================== Add ====================
 function openAdd() {
-  var active = providers.filter(function(p) { return p.apiKey && p.apiKey.trim() })
-  var existingIds = active.map(function(p) { return p.id })
-  var avail = TEMPLATES.filter(function(t) { return existingIds.indexOf(t.id) === -1 })
-
-  document.getElementById('addScroll').innerHTML = avail.map(function(t) {
+  // 多实例：不排除已添加，可重复添加同模板
+  document.getElementById('addScroll').innerHTML = TEMPLATES.map(function(t) {
     return '<div class="add-item" id="aitem-' + t.id + '">' +
       '<div class="add-item-row" onclick="toggleCheck(\'' + t.id + '\')">' +
         '<div class="cb" id="cb-' + t.id + '"></div>' +
         '<span class="add-item-name">' + esc(t.name) + '</span>' +
       '</div>' +
       '<div class="add-key-area" id="keyarea-' + t.id + '">' +
-        '<input id="key-' + t.id + '" placeholder="' + (t.id === 'sensenova' ? '手机号|PIN 或 access_token' : 'API KEY') + '" oninput="onAddInput(\'' + t.id + '\')">' +
-        (t.id === 'sensenova' ? '<div class="add-key-hint">手机号|PIN 自动登录（需本地代理 server.js）；或粘贴登录后的 access_token</div>' : '') +
-        (t.authType === 'hmac' ? '<input id="secret-' + t.id + '" placeholder="API Secret" oninput="onAddInput(\'' + t.id + '\')">' : '') +
+        '<input id="name-' + t.id + '" placeholder="名称（默认' + esc(t.name) + '）">' +
+        '<input id="endpoint-' + t.id + '" placeholder="API 地址" value="' + esc(t.endpoint) + '">' +
+        '<input id="key-' + t.id + '" placeholder="' + (t.id === 'sensenova' ? 'PIN 或 access_token' : 'API KEY') + '">' +
+        (t.id === 'sensenova' ? '<input id="account-' + t.id + '" placeholder="账户（手机号，自动登录）"><div class="add-key-hint">填手机号+PIN 自动登录（需代理）；或只填 access_token</div>' : '') +
+        (t.authType === 'hmac' ? '<input id="secret-' + t.id + '" placeholder="API Secret">' : '') +
       '</div></div>'
   }).join('')
-
   document.getElementById('addModal').classList.remove('hidden')
 }
 
@@ -759,24 +763,25 @@ function confirmAdd() {
 
   var added = false
   checked.forEach(function(cb) {
-    var id = cb.id.replace('cb-','')
-    var keyInput = document.getElementById('key-' + id)
+    var tid = cb.id.replace('cb-','')
+    var keyInput = document.getElementById('key-' + tid)
     var key = keyInput ? keyInput.value.trim() : ''
-    if (!key) { alert('请填写 API KEY'); return }
+    if (!key) { alert('请填写 KEY/PIN'); return }
 
-    var tpl = TEMPLATES.find(function(t) { return t.id === id })
+    var tpl = TEMPLATES.find(function(t) { return t.id === tid })
     if (!tpl) return
-
-    var existing = providers.find(function(p) { return p.id === id })
-    if (existing) {
-      existing.apiKey = key
-      existing.apiSecret = (document.getElementById('secret-' + id) || {}).value || ''
-    } else {
-      var copy = JSON.parse(JSON.stringify(tpl))
-      copy.apiKey = key
-      copy.apiSecret = (document.getElementById('secret-' + id) || {}).value || ''
-      providers.push(copy)
-    }
+    var nameInput = document.getElementById('name-' + tid)
+    var nameVal = nameInput ? nameInput.value.trim() : ''
+    var copy = JSON.parse(JSON.stringify(tpl))
+    copy.uid = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
+    copy.tid = tid
+    copy.name = nameVal || tpl.name
+    copy.endpoint = (document.getElementById('endpoint-' + tid) || {}).value.trim() || tpl.endpoint
+    copy.apiKey = key
+    copy.account = (document.getElementById('account-' + tid) || {}).value ? document.getElementById('account-' + tid).value.trim() : ''
+    copy.apiSecret = (document.getElementById('secret-' + tid) || {}).value || ''
+    copy.id = copy.uid
+    providers.push(copy)
     added = true
   })
 
@@ -808,19 +813,18 @@ function confirmImport() {
     }
 
     data.providers.forEach(function(imp) {
-      var existing = providers.find(function(p) { return p.id === imp.id })
-      if (existing) {
-        existing.apiKey = imp.apiKey || ''
-        existing.apiSecret = imp.apiSecret || ''
-      } else {
-        var tpl = TEMPLATES.find(function(t) { return t.id === imp.id })
-        if (tpl) {
-          var copy = JSON.parse(JSON.stringify(tpl))
-          copy.apiKey = imp.apiKey || ''
-          copy.apiSecret = imp.apiSecret || ''
-          providers.push(copy)
-        }
-      }
+      var tpl = TEMPLATES.find(function(t) { return t.id === imp.id })
+      if (!tpl) return
+      var copy = JSON.parse(JSON.stringify(tpl))
+      copy.uid = imp.uid || ('p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8))
+      copy.tid = imp.id
+      copy.name = imp.name || tpl.name
+      copy.endpoint = imp.endpoint || tpl.endpoint
+      copy.apiKey = imp.apiKey || ''
+      copy.account = imp.account || ''
+      copy.apiSecret = imp.apiSecret || ''
+      copy.id = copy.uid
+      providers.push(copy)
     })
 
     save(); closePanel('importModal'); refreshAll()
@@ -836,11 +840,17 @@ function editOne(id) {
   document.getElementById('editEndpointInput').value = p.endpoint || ''
   var keyInput = document.getElementById('editKeyInput')
   keyInput.value = p.apiKey || ''
-  keyInput.placeholder = (id === 'sensenova' ? '手机号|PIN 或 access_token' : 'sk-...')
+  keyInput.placeholder = (p.tid === 'sensenova' ? 'PIN 或 access_token' : 'sk-...')
+  // account 字段：仅商汤显示
+  var accLabel = document.getElementById('editAccountLabel')
+  var accInput = document.getElementById('editAccountInput')
+  var showAcc = (p.tid === 'sensenova')
+  if (accLabel) accLabel.style.display = showAcc ? 'block' : 'none'
+  if (accInput) { accInput.style.display = showAcc ? 'block' : 'none'; accInput.value = p.account || '' }
   // 商汤查询走独立函数（硬编码 models/usages URL），endpoint 字段无意义，隐藏避免误导
   var epLabel = document.querySelector('label[for="editEndpointInput"]')
   var epInput = document.getElementById('editEndpointInput')
-  var hideEp = (id === 'sensenova')
+  var hideEp = (p.tid === 'sensenova')
   if (epLabel) epLabel.style.display = hideEp ? 'none' : 'block'
   epInput.style.display = hideEp ? 'none' : 'block'
   document.getElementById('editKeyHint').style.display = hideEp ? 'block' : 'none'
@@ -863,18 +873,20 @@ function saveEdit() {
   p.name = document.getElementById('editNameInput').value.trim() || p.name
   p.endpoint = document.getElementById('editEndpointInput').value.trim() || p.endpoint
   p.apiKey = document.getElementById('editKeyInput').value.trim()
+  var accInput = document.getElementById('editAccountInput')
+  if (accInput) p.account = accInput.value.trim()
   p.apiSecret = document.getElementById('editSecretInput').value.trim()
   // 同步更新当前卡片名称，避免刷新前仍显示旧名
   for (var i = 0; i < cards.length; i++) {
-    if (cards[i].id === editProvId) { cards[i].name = p.name; break }
+    if (cards[i].uid === editProvId || cards[i].id === editProvId) { cards[i].name = p.name; break }
   }
   save(); closePanel('editModal'); refreshAll()
 }
 
 function deleteOne(id) {
   if (!confirm('确定移除该供应商？')) return
-  var p = findProv(id); if (p) { p.apiKey = ''; p.apiSecret = '' }
-  cards = cards.filter(function(c) { return c.id !== id })
+  providers = providers.filter(function(p) { return p.uid !== id })
+  cards = cards.filter(function(c) { return c.uid !== id && c.id !== id })
   save(); renderAll()
 }
 
