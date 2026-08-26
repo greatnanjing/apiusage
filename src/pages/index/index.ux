@@ -89,7 +89,10 @@
               <text class="add-item-name">{{ tpl.name }}</text>
             </div>
             <div class="add-key-area" show="{{ tpl.checked }}">
-              <input class="add-input" placeholder="API KEY" value="{{ tpl.key }}" onchange="onAddKeyChange"></input>
+              <input class="add-input" placeholder="名称（可选）" value="{{ tpl.customName }}" onchange="onAddNameChange"></input>
+              <input class="add-input" placeholder="API 地址" value="{{ tpl.endpoint }}" onchange="onAddEndpointChange"></input>
+              <input class="add-input" placeholder="API KEY / PIN" value="{{ tpl.key }}" onchange="onAddKeyChange"></input>
+              <input class="add-input" placeholder="账户（手机号）" show="{{ tpl.isSensenova }}" value="{{ tpl.account }}" onchange="onAddAccountChange"></input>
               <input class="add-input" placeholder="API Secret"
                      show="{{ tpl.isHmac }}" value="{{ tpl.secret }}" onchange="onAddSecretChange"></input>
             </div>
@@ -124,7 +127,10 @@
     <div class="modal-mask" show="{{ showEditPanel }}">
       <div class="modal-content">
         <text class="modal-title">编辑 {{ editName }}</text>
+        <input class="modal-input" placeholder="名称" value="{{ editName }}" onchange="onEditNameChg"></input>
+        <input class="modal-input" placeholder="API 地址" value="{{ editEndpoint }}" onchange="onEditEndpointChg" show="{{ !editHideEndpoint }}"></input>
         <input class="modal-input" placeholder="API KEY" value="{{ editKey }}" onchange="onEditKeyChg"></input>
+        <input class="modal-input" placeholder="账户（手机号）" value="{{ editAccount }}" onchange="onEditAccountChg" show="{{ editShowAccount }}"></input>
         <input class="modal-input" placeholder="API Secret（仅讯飞需要）" show="{{ editHasSecret }}"
                value="{{ editSecret }}" onchange="onEditSecretChg"></input>
         <div class="modal-footer">
@@ -174,9 +180,13 @@ export default {
     showEditPanel: false,
     editId: '',
     editName: '',
+    editEndpoint: '',
     editKey: '',
     editSecret: '',
+    editAccount: '',
     editHasSecret: false,
+    editHideEndpoint: false,
+    editShowAccount: false,
 
     // 编辑输入缓冲
     _chgKey: '',
@@ -200,6 +210,14 @@ export default {
     loadProviders().then(function (saved) {
       if (saved && saved.length) {
         self.providers = saved
+      }
+      // 旧数据迁移：无 uid/tid → uid=id, tid=id, account=''
+      for (var i = 0; i < self.providers.length; i++) {
+        var p = self.providers[i]
+        if (!p.uid) { p.uid = p.id || ('p_' + Date.now() + '_' + i); p.tid = p.id || p.uid }
+        else if (!p.tid) p.tid = p.id || p.uid
+        if (p.account === undefined) p.account = ''
+        p.id = p.uid
       }
       return loadSnapshot()
     }).then(function (snap) {
@@ -226,11 +244,14 @@ export default {
       for (var i = 0; i < results.length; i++) {
         var r = results[i]
         handled[r.providerId] = true
+        var rProv = self._findProv(r.providerId)
         if (r.status === 'ok') {
           display.push(self._buildCard(r.providerId, r.data))
         } else {
           display.push({
             id: r.providerId,
+            uid: r.providerId,
+            tid: rProv ? rProv.tid : '',
             name: self._provName(r.providerId),
             status: 'error',
             statusLabel: '错误',
@@ -247,6 +268,8 @@ export default {
         if (!handled[active[j].id]) {
           display.push({
             id: active[j].id,
+            uid: active[j].id,
+            tid: active[j].tid,
             name: active[j].name,
             status: 'unknown',
             statusLabel: '未知',
@@ -262,10 +285,10 @@ export default {
       // 为智谱并行查询 Coding Plan、商汤并行查询各模型余量（与 web 版 refreshAll 一致）
       var cpPromises = []
       for (var n = 0; n < display.length; n++) {
-        if (display[n].id === 'zhipu') {
+        if (display[n].tid === 'zhipu') {
           cpPromises.push(self._queryZhipuCodingPlan(display[n]))
         }
-        if (display[n].id === 'sensenova') {
+        if (display[n].tid === 'sensenova') {
           cpPromises.push(self._querySenseNovaUsage(display[n]))
         }
       }
@@ -289,22 +312,22 @@ export default {
     var prov = this._findProv(id)
     if (!prov) return
     queryBalance(prov).then(function (res) {
-      var card = self._buildCard(prov.id, res.data)
+      var card = self._buildCard(prov.uid, res.data)
       for (var i = 0; i < self.cards.length; i++) {
-        if (self.cards[i].id === id) {
+        if (self.cards[i].uid === id || self.cards[i].id === id) {
           self.cards.splice(i, 1, card)
           break
         }
       }
       saveSnapshot(self.cards)
       // 智谱额外查询 Coding Plan、商汤额外查询各模型余量（与 web 版 refreshOne 一致）
-      if (id === 'zhipu') {
+      if (prov.tid === 'zhipu') {
         self._queryZhipuCodingPlan(card).then(function () {
           self.cards = self.cards.slice()
           saveSnapshot(self.cards)
         })
       }
-      if (id === 'sensenova') {
+      if (prov.tid === 'sensenova') {
         self._querySenseNovaUsage(card).then(function () {
           self.cards = self.cards.slice()
           saveSnapshot(self.cards)
@@ -331,9 +354,13 @@ export default {
     if (!prov) return
     this.editId = id
     this.editName = prov.name
+    this.editEndpoint = prov.endpoint || ''
     this.editKey = prov.apiKey || ''
     this.editSecret = prov.apiSecret || ''
+    this.editAccount = prov.account || ''
     this.editHasSecret = prov.authType === 'hmac'
+    this.editHideEndpoint = (prov.tid === 'sensenova')
+    this.editShowAccount = (prov.tid === 'sensenova')
     this.showEditPanel = true
   },
 
@@ -352,15 +379,16 @@ export default {
   },
 
   _doDelete: function (id) {
-    var prov = this._findProv(id)
-    if (prov) {
-      prov.apiKey = ''
-      prov.apiSecret = ''
-      saveProviders(this.providers)
+    // 删除该 provider 实例（多实例：按 uid 删）
+    var provs = []
+    for (var p = 0; p < this.providers.length; p++) {
+      if (this.providers[p].uid !== id) provs.push(this.providers[p])
     }
+    this.providers = provs
+    saveProviders(this.providers)
     var cards = []
     for (var i = 0; i < this.cards.length; i++) {
-      if (this.cards[i].id !== id) cards.push(this.cards[i])
+      if (this.cards[i].uid !== id && this.cards[i].id !== id) cards.push(this.cards[i])
     }
     this.cards = cards
     saveSnapshot(this.cards)
@@ -372,23 +400,18 @@ export default {
     var list = []
     for (var i = 0; i < PROVIDER_TEMPLATES.length; i++) {
       var tpl = PROVIDER_TEMPLATES[i]
-      var exists = false
-      for (var j = 0; j < this.providers.length; j++) {
-        if (this.providers[j].id === tpl.id && this.providers[j].apiKey && this.providers[j].apiKey.trim()) {
-          exists = true
-          break
-        }
-      }
-      if (!exists) {
-        list.push({
-          id: tpl.id,
-          name: tpl.name,
-          isHmac: tpl.authType === 'hmac',
-          checked: false,
-          key: '',
-          secret: ''
-        })
-      }
+      list.push({
+        id: tpl.id,
+        name: tpl.name,
+        isHmac: tpl.authType === 'hmac',
+        isSensenova: tpl.id === 'sensenova',
+        checked: false,
+        key: '',
+        secret: '',
+        customName: '',
+        endpoint: tpl.endpoint,
+        account: ''
+      })
     }
     this.availableTemplates = list
     this.showAddPanel = true
@@ -408,6 +431,15 @@ export default {
     // We use a simple data binding approach
   },
 
+  onAddNameChange: function (e) {
+  },
+
+  onAddEndpointChange: function (e) {
+  },
+
+  onAddAccountChange: function (e) {
+  },
+
   onAddSecretChange: function (e) {
   },
 
@@ -418,7 +450,7 @@ export default {
       var t = this.availableTemplates[i]
       if (t.checked) {
         if (!t.key || !t.key.trim()) {
-          prompt.showToast({ message: '请填写 ' + t.name + ' 的 API KEY' })
+          prompt.showToast({ message: '请填写 ' + t.name + ' 的 KEY/PIN' })
           return
         }
         toAdd.push(t)
@@ -435,22 +467,16 @@ export default {
         if (PROVIDER_TEMPLATES[k].id === toAdd[j].id) { tpl = PROVIDER_TEMPLATES[k]; break }
       }
       if (!tpl) continue
-
-      var exists = false
-      for (var m = 0; m < this.providers.length; m++) {
-        if (this.providers[m].id === toAdd[j].id) {
-          this.providers[m].apiKey = toAdd[j].key
-          this.providers[m].apiSecret = toAdd[j].secret || ''
-          exists = true
-          break
-        }
-      }
-      if (!exists) {
-        var copy = JSON.parse(JSON.stringify(tpl))
-        copy.apiKey = toAdd[j].key
-        copy.apiSecret = toAdd[j].secret || ''
-        this.providers.push(copy)
-      }
+      var copy = JSON.parse(JSON.stringify(tpl))
+      copy.uid = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
+      copy.tid = toAdd[j].id
+      copy.name = (toAdd[j].customName && toAdd[j].customName.trim()) || tpl.name
+      copy.endpoint = (toAdd[j].endpoint && toAdd[j].endpoint.trim()) || tpl.endpoint
+      copy.apiKey = toAdd[j].key
+      copy.account = toAdd[j].account || ''
+      copy.apiSecret = toAdd[j].secret || ''
+      copy.id = copy.uid
+      this.providers.push(copy)
     }
 
     saveProviders(this.providers)
@@ -494,26 +520,21 @@ export default {
         }
         if (!valid) { this.importError = '未知供应商: ' + imp.id; return }
 
-        var found = false
-        for (var j = 0; j < this.providers.length; j++) {
-          if (this.providers[j].id === imp.id) {
-            this.providers[j].apiKey = imp.apiKey || ''
-            this.providers[j].apiSecret = imp.apiSecret || ''
-            found = true
-            break
-          }
+        var tpl = null
+        for (var m = 0; m < PROVIDER_TEMPLATES.length; m++) {
+          if (PROVIDER_TEMPLATES[m].id === imp.id) { tpl = PROVIDER_TEMPLATES[m]; break }
         }
-        if (!found) {
-          var tpl = null
-          for (var m = 0; m < PROVIDER_TEMPLATES.length; m++) {
-            if (PROVIDER_TEMPLATES[m].id === imp.id) { tpl = PROVIDER_TEMPLATES[m]; break }
-          }
-          if (tpl) {
-            var copy = JSON.parse(JSON.stringify(tpl))
-            copy.apiKey = imp.apiKey || ''
-            copy.apiSecret = imp.apiSecret || ''
-            this.providers.push(copy)
-          }
+        if (tpl) {
+          var copy = JSON.parse(JSON.stringify(tpl))
+          copy.uid = imp.uid || ('p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8))
+          copy.tid = imp.id
+          copy.name = imp.name || tpl.name
+          copy.endpoint = imp.endpoint || tpl.endpoint
+          copy.apiKey = imp.apiKey || ''
+          copy.account = imp.account || ''
+          copy.apiSecret = imp.apiSecret || ''
+          copy.id = copy.uid
+          this.providers.push(copy)
         }
       }
       saveProviders(this.providers)
@@ -526,6 +547,14 @@ export default {
 
   // ============ 编辑弹窗 ============
 
+  onEditNameChg: function (e) {
+    this.editName = e.text || ''
+  },
+
+  onEditEndpointChg: function (e) {
+    this.editEndpoint = e.text || ''
+  },
+
   onEditKeyChg: function (e) {
     this.editKey = e.text || ''
   },
@@ -534,11 +563,18 @@ export default {
     this.editSecret = e.text || ''
   },
 
+  onEditAccountChg: function (e) {
+    this.editAccount = e.text || ''
+  },
+
   saveEdit: function () {
     var prov = this._findProv(this.editId)
     if (prov) {
+      prov.name = this.editName.trim() || prov.name
+      prov.endpoint = this.editEndpoint.trim() || prov.endpoint
       prov.apiKey = this.editKey.trim()
       prov.apiSecret = this.editSecret ? this.editSecret.trim() : ''
+      prov.account = this.editAccount.trim()
       saveProviders(this.providers)
     }
     this.showEditPanel = false
@@ -569,7 +605,7 @@ export default {
 
   _buildCard: function (id, rawData) {
     var prov = this._findProv(id)
-    if (!prov) return { id: id, name: id, status: 'unknown', statusLabel: '未知', balanceText: '—', expanded: false, extraRows: [], codingPlan: null, sensenovaModels: [], lastUpdate: 0 }
+    if (!prov) return { id: id, uid: id, name: id, status: 'unknown', statusLabel: '未知', balanceText: '—', expanded: false, extraRows: [], codingPlan: null, sensenovaModels: [], lastUpdate: 0 }
     var parsed = parseResponse(rawData, prov.responseMapping)
     var fmt = formatForDisplay(parsed)
     var rows = []
@@ -586,7 +622,7 @@ export default {
     var existingCp = null
     var existingSn = null
     for (var n = 0; n < this.cards.length; n++) {
-      if (this.cards[n].id === id) {
+      if (this.cards[n].uid === id || this.cards[n].id === id) {
         existingCp = this.cards[n].codingPlan
         existingSn = this.cards[n].sensenovaModels
         break
@@ -594,6 +630,8 @@ export default {
     }
     var card = {
       id: id,
+      uid: id,
+      tid: prov.tid,
       name: prov.name,
       status: fmt.status,
       statusLabel: STATUS_MAP[fmt.status] || '未知',
@@ -612,7 +650,7 @@ export default {
 
   _queryZhipuCodingPlan: function (card) {
     var self = this
-    var p = this._findProv('zhipu')
+    var p = this._findProv(card.uid || card.id)
     if (!p) return Promise.resolve()
     return fetchZhipuCodingPlan(p.apiKey).then(function (data) {
       card.codingPlan = parseZhipuCpData(data)
@@ -627,9 +665,9 @@ export default {
   // ============ 商汤 SenseNova 各模型余量（与 web 版 querySenseNovaUsage 一致，仅手动 token 模式） ============
 
   _querySenseNovaUsage: function (card) {
-    var p = this._findProv('sensenova')
+    var p = this._findProv(card.uid || card.id)
     if (!p) return Promise.resolve()
-    return fetchSenseNovaUsage(p.apiKey).then(function (result) {
+    return fetchSenseNovaUsage(p.account, p.apiKey).then(function (result) {
       var models = parseSenseNovaData(result.usages, result.models)
       card.sensenovaModels = models.map(function (m) {
         return { name: m.name, pct: m.pct, cls: m.pct <= 0 ? 'cp-high' : m.pct <= 20 ? 'cp-warn' : 'cp-ok' }

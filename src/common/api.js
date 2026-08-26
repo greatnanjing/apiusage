@@ -141,8 +141,11 @@ function snFetch(url, token) {
  * @param {string} apiKey - 商汤 access_token
  * @returns {Promise<{models: string[], usages: Object}>}
  */
-export function fetchSenseNovaUsage(apiKey) {
+export function fetchSenseNovaUsage(account, apiKey) {
+  const acc = (account || '').trim()
   const token = (apiKey || '').trim()
+  // 快应用无 server.js 代理，不支持 account(手机号)+PIN 自动登录，仅手动 access_token
+  if (acc) return Promise.reject(new Error('快应用不支持自动登录，请填 access_token'))
   const tenantId = decodeJwtTenantId(token)
   if (!tenantId) return Promise.reject(new Error('token 格式无效'))
   return snFetch(SENSENOVA_MODELS_URL, token).then(function (mj) {
