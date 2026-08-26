@@ -1,4 +1,5 @@
 import fetch from '@system.fetch'
+import { decodeJwtTenantId } from './parser.js'
 
 // 默认超时 10 秒
 const DEFAULT_TIMEOUT = 10000
@@ -100,6 +101,57 @@ export function fetchZhipuCodingPlan(apiKey) {
       fail: function (err, code) {
         reject(new Error((err && err.message) || 'HTTP ' + code))
       }
+    })
+  })
+}
+
+// ==============================
+// 商汤 SenseNova 各模型余量（与 web 版 querySenseNovaUsage 一致，快应用端仅手动 token 模式）
+// ==============================
+
+const SENSENOVA_MODELS_URL = 'https://platform.sensenova.cn/lite/console/v1/models'
+const SENSENOVA_USAGE_URL = 'https://platform.sensenova.cn/lite/console/v1/user/coding-plan/usages'
+
+function snFetch(url, token) {
+  return new Promise((resolve, reject) => {
+    fetch.fetch({
+      url: url,
+      method: 'GET',
+      header: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' },
+      responseType: 'json',
+      timeout: DEFAULT_TIMEOUT,
+      success: function (resp) {
+        try {
+          const data = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data
+          resolve(data)
+        } catch (e) { reject(new Error('响应解析失败')) }
+      },
+      fail: function (err, code) {
+        let msg = 'HTTP ' + code
+        if (code === 401) msg = 'token 已失效'
+        reject(new Error(msg))
+      }
+    })
+  })
+}
+
+/**
+ * 查询商汤各模型 5 小时窗口余量。快应用无 CORS，直连 platform.sensenova.cn。
+ * apiKey 填 access_token(JWT)；account_id 从 token 解码，先调 models 拿列表，再调 coding-plan/usages 拿余量。
+ * @param {string} apiKey - 商汤 access_token
+ * @returns {Promise<{models: string[], usages: Object}>}
+ */
+export function fetchSenseNovaUsage(apiKey) {
+  const token = (apiKey || '').trim()
+  const tenantId = decodeJwtTenantId(token)
+  if (!tenantId) return Promise.reject(new Error('token 格式无效'))
+  return snFetch(SENSENOVA_MODELS_URL, token).then(function (mj) {
+    const modelList = (mj && mj.models) || []
+    if (!modelList.length) return { models: [], usages: null }
+    const qs = modelList.map(function (m) { return 'model_ids=' + encodeURIComponent(m) }).join('&')
+    const usageUrl = SENSENOVA_USAGE_URL + '?account_id=' + tenantId + '&' + qs
+    return snFetch(usageUrl, token).then(function (uj) {
+      return { models: modelList, usages: uj }
     })
   })
 }

@@ -54,6 +54,11 @@
             <text class="detail-label">Coding Plan 7天:</text>
             <text class="detail-value {{ card.cp7Cls }}">{{ card.cp7Text }}</text>
           </div>
+          <!-- 商汤各模型 5 小时窗口余量（与 web 版 sensenovaModels 一致） -->
+          <div class="detail-row" for="m in card.sensenovaModels">
+            <text class="detail-label">{{ m.name }}:</text>
+            <text class="detail-value {{ m.cls }}">{{ m.pct }}%</text>
+          </div>
           <div class="detail-row" for="row in card.extraRows">
             <text class="detail-label">{{ row.label }}</text>
             <text class="detail-value">{{ row.value }}</text>
@@ -133,8 +138,8 @@
 
 <script>
 import { PROVIDER_TEMPLATES, generateImportTemplate } from '../../common/providers.js'
-import { queryAllBalances, queryBalance, fetchZhipuCodingPlan } from '../../common/api.js'
-import { parseResponse, formatForDisplay, parseZhipuCpData } from '../../common/parser.js'
+import { queryAllBalances, queryBalance, fetchZhipuCodingPlan, fetchSenseNovaUsage } from '../../common/api.js'
+import { parseResponse, formatForDisplay, parseZhipuCpData, parseSenseNovaData } from '../../common/parser.js'
 import { loadProviders, saveProviders, loadSnapshot, saveSnapshot } from '../../common/storage.js'
 import prompt from '@system.prompt'
 
@@ -233,6 +238,7 @@ export default {
             expanded: false,
             extraRows: [],
             codingPlan: null,
+            sensenovaModels: [],
             lastUpdate: Date.now()
           })
         }
@@ -248,15 +254,19 @@ export default {
             expanded: false,
             extraRows: [],
             codingPlan: null,
+            sensenovaModels: [],
             lastUpdate: 0
           })
         }
       }
-      // 为智谱并行查询 Coding Plan（与 web 版 refreshAll 一致）
+      // 为智谱并行查询 Coding Plan、商汤并行查询各模型余量（与 web 版 refreshAll 一致）
       var cpPromises = []
       for (var n = 0; n < display.length; n++) {
         if (display[n].id === 'zhipu') {
           cpPromises.push(self._queryZhipuCodingPlan(display[n]))
+        }
+        if (display[n].id === 'sensenova') {
+          cpPromises.push(self._querySenseNovaUsage(display[n]))
         }
       }
       var finish = function () {
@@ -287,9 +297,15 @@ export default {
         }
       }
       saveSnapshot(self.cards)
-      // 智谱额外查询 Coding Plan（与 web 版 refreshOne 一致）
+      // 智谱额外查询 Coding Plan、商汤额外查询各模型余量（与 web 版 refreshOne 一致）
       if (id === 'zhipu') {
         self._queryZhipuCodingPlan(card).then(function () {
+          self.cards = self.cards.slice()
+          saveSnapshot(self.cards)
+        })
+      }
+      if (id === 'sensenova') {
+        self._querySenseNovaUsage(card).then(function () {
           self.cards = self.cards.slice()
           saveSnapshot(self.cards)
         })
@@ -553,7 +569,7 @@ export default {
 
   _buildCard: function (id, rawData) {
     var prov = this._findProv(id)
-    if (!prov) return { id: id, name: id, status: 'unknown', statusLabel: '未知', balanceText: '—', expanded: false, extraRows: [], codingPlan: null, lastUpdate: 0 }
+    if (!prov) return { id: id, name: id, status: 'unknown', statusLabel: '未知', balanceText: '—', expanded: false, extraRows: [], codingPlan: null, sensenovaModels: [], lastUpdate: 0 }
     var parsed = parseResponse(rawData, prov.responseMapping)
     var fmt = formatForDisplay(parsed)
     var rows = []
@@ -566,11 +582,13 @@ export default {
         rows.push({ label: LABEL_MAP[key] || key, value: String(val) })
       }
     }
-    // 保留已有的 codingPlan 数据（避免余额查询结果覆盖 Coding Plan 数据，与 web 版 buildCard 一致）
+    // 保留已有的 codingPlan / sensenovaModels 数据（避免余额查询结果覆盖附加数据，与 web 版 buildCard 一致）
     var existingCp = null
+    var existingSn = null
     for (var n = 0; n < this.cards.length; n++) {
       if (this.cards[n].id === id) {
         existingCp = this.cards[n].codingPlan
+        existingSn = this.cards[n].sensenovaModels
         break
       }
     }
@@ -583,6 +601,7 @@ export default {
       expanded: false,
       extraRows: rows,
       codingPlan: existingCp,
+      sensenovaModels: existingSn || [],
       lastUpdate: Date.now()
     }
     this._applyCodingPlanFields(card)
@@ -602,6 +621,30 @@ export default {
       // Coding Plan 查询失败不影响余额显示（与 web 版一致）
       card.codingPlan = null
       self._applyCodingPlanFields(card)
+    })
+  },
+
+  // ============ 商汤 SenseNova 各模型余量（与 web 版 querySenseNovaUsage 一致，仅手动 token 模式） ============
+
+  _querySenseNovaUsage: function (card) {
+    var p = this._findProv('sensenova')
+    if (!p) return Promise.resolve()
+    return fetchSenseNovaUsage(p.apiKey).then(function (result) {
+      var models = parseSenseNovaData(result.usages, result.models)
+      card.sensenovaModels = models.map(function (m) {
+        return { name: m.name, pct: m.pct, cls: m.pct <= 0 ? 'cp-high' : m.pct <= 20 ? 'cp-warn' : 'cp-ok' }
+      })
+      if (card.sensenovaModels.length) {
+        var minPct = Math.min.apply(null, models.map(function (m) { return m.pct }))
+        card.balanceText = card.sensenovaModels.length + ' 个模型·最低 ' + minPct + '%'
+        card.status = minPct < 20 ? 'low' : 'ok'
+        card.statusLabel = STATUS_MAP[card.status] || '未知'
+      }
+    }).catch(function (e) {
+      card.sensenovaModels = []
+      card.status = 'error'
+      card.statusLabel = STATUS_MAP['error'] || '错误'
+      card.balanceText = (e && e.message) || '查询失败'
     })
   },
 

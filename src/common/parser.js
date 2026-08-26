@@ -128,6 +128,50 @@ export function parseZhipuCpData(json) {
 }
 
 /**
+ * 解析商汤 SenseNova 各模型余量（与 web 版 parseSenseNovaData 一致）
+ * 返回 [{name, pct}]，按余量升序（低的在前，便于发现快用完的模型）
+ */
+export function parseSenseNovaData(json, modelList) {
+  if (!json || !json.model_remaining_percent) return []
+  const map = json.model_remaining_percent
+  return modelList.map(function (name) {
+    return { name: name, pct: Math.round((Number(map[name]) || 0) * 100) / 100 }
+  }).sort(function (a, b) { return a.pct - b.pct })
+}
+
+/**
+ * 从 access_token(JWT) 解码 tenant_id 作为 account_id（与 web 版 decodeJwtTenantId 一致）
+ * 快应用环境可能无 atob，用 polyfill 兜底（JWT payload 为 ASCII JSON，polyfill 足够）
+ */
+export function decodeJwtTenantId(token) {
+  try {
+    const parts = (token || '').split('.')
+    if (parts.length < 2) return null
+    const payload = JSON.parse(b64urlDecode(parts[1]))
+    return (payload.ext && payload.ext.tenant_id) || null
+  } catch (e) { return null }
+}
+
+function b64urlDecode(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/')
+  while (s.length % 4) s += '='
+  if (typeof atob === 'function') return atob(s)
+  // polyfill（逐 4 字符解码 3 字节，ASCII 足够）
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  let str = ''
+  for (let i = 0; i < s.length; i += 4) {
+    const a = chars.indexOf(s[i])
+    const b = chars.indexOf(s[i + 1])
+    const c = s[i + 2] ? chars.indexOf(s[i + 2]) : -1
+    const d = s[i + 3] ? chars.indexOf(s[i + 3]) : -1
+    const n = (a << 18) | (b << 12) | (c >= 0 ? c << 6 : 0) | (d >= 0 ? d : 0)
+    if (c >= 0) str += String.fromCharCode((n >> 16) & 255)
+    if (d >= 0) str += String.fromCharCode((n >> 8) & 255)
+  }
+  return str
+}
+
+/**
  * 将剩余毫秒数格式化为简短文案（与 web 版 formatRemaining 一致）
  */
 export function formatRemaining(ms) {

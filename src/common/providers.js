@@ -109,6 +109,19 @@ export const PROVIDER_TEMPLATES = [
       usedPath: 'data.used',
       totalPath: 'data.total'
     }
+  },
+  // 商汤 SenseNova：apiKey 填登录后的 access_token（JWT，3 小时有效）。
+  // 快应用无 CORS 可直连 platform.sensenova.cn，但 JWE 自动登录难实现（需 RSA 库），
+  // 故快应用端仅支持手动 token 模式（web 端另有「手机号|PIN」自动登录）。
+  // account_id 从 JWT 的 ext.tenant_id 解码，余量走 fetchSenseNovaUsage/parseSenseNovaData。
+  {
+    id: 'sensenova',
+    name: '商汤 SenseNova',
+    apiKey: '',
+    endpoint: 'https://platform.sensenova.cn/lite/console/v1/models',
+    method: 'GET',
+    authType: 'bearer',
+    responseMapping: {}
   }
 ]
 
