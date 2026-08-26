@@ -56,7 +56,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card-row2-detail{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:2px 14px}
 .card-btns{display:flex;gap:4px;flex-shrink:0;align-items:flex-start}
 .detail-item{font-size:11px;color:#888}
-.detail-item .dl{color:#888}.detail-item .dv{color:#555}
+.detail-item .dl{color:#888}.detail-item .dv{color:#555}.detail-item .dv.ok{color:#4caf50}.detail-item .dv.warn{color:#ff9800}.detail-item .dv.high{color:#f44336}
 .detail-item.cp-item .dv{font-weight:600}
 .detail-item.cp-item .dv.ok{color:#4caf50}
 .detail-item.cp-item .dv.warn{color:#ff9800}
@@ -90,6 +90,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .add-key-area{display:none;margin:8px 0 0 34px;flex-direction:column;gap:6px}
 .add-key-area.show{display:flex}
 .add-key-area input{height:40px;border:1px solid #ddd;border-radius:4px;padding:0 10px;font-size:14px;width:100%}
+.add-key-hint{font-size:12px;color:#999;line-height:1.4;margin-top:2px}
 
 /* 导入弹窗 */
 .import-panel{width:92%}
@@ -186,6 +187,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <input id="editEndpointInput" placeholder="https://api.deepseek.com/user/balance">
       <label class="edit-label" for="editKeyInput">API KEY</label>
       <input id="editKeyInput" placeholder="sk-...">
+      <div id="editKeyHint" class="add-key-hint" style="display:none">手机号|PIN 自动登录（需本地代理 server.js）；或粘贴登录后的 access_token</div>
       <label class="edit-label" for="editSecretInput" id="editSecretLabel" style="display:none">API Secret（仅讯飞需要）</label>
       <input id="editSecretInput" placeholder="讯飞 API Secret" style="display:none">
       <div class="modal-footer" style="padding:12px 0 0;border:none">
@@ -197,7 +199,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 
 <script>
-// ==================== 8 家供应商模板 ====================
+// ==================== 供应商模板 ====================
 var TEMPLATES = [
   {id:'deepseek',name:'DeepSeek',apiKey:'',endpoint:'https://api.deepseek.com/user/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'balance_infos[0].total_balance',currencyPath:'balance_infos[0].currency'}},
   {id:'kimi',name:'Kimi / 月之暗面',apiKey:'',endpoint:'https://api.moonshot.cn/v1/users/me/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.available_balance',voucherPath:'data.voucher_balance',cashPath:'data.cash_balance'}},
@@ -206,7 +208,12 @@ var TEMPLATES = [
   {id:'zhipu',name:'智谱 / GLM',apiKey:'',endpoint:'https://bigmodel.cn/api/biz/account/query-customer-account-report',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.balance',availableBalancePath:'data.availableBalance',rechargePath:'data.rechargeAmount',giftPath:'data.giveAmount',creditPath:'data.creditBalance'}},
   {id:'minimax',name:'MiniMax',apiKey:'',endpoint:'https://www.minimaxi.com/account/query_balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'available_amount',cashPath:'cash_balance',voucherPath:'voucher_balance',creditPath:'credit_balance',owedPath:'owed_amount'}},
   {id:'volcengine',name:'火山引擎 / 豆包',apiKey:'',endpoint:'https://ark.cn-beijing.volces.com/api/v3/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'result.balance',currencyPath:'result.currency'}},
-  {id:'iflytek',name:'讯飞星辰',apiKey:'',apiSecret:'',endpoint:'https://spark-api-open.xf-yun.com/v1/user/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.balance',usedPath:'data.used',totalPath:'data.total'}}
+  {id:'iflytek',name:'讯飞星辰',apiKey:'',apiSecret:'',endpoint:'https://spark-api-open.xf-yun.com/v1/user/balance',method:'GET',authType:'bearer',responseMapping:{balancePath:'data.balance',usedPath:'data.used',totalPath:'data.total'}},
+  // 商汤 SenseNova：apiKey 填登录后的 access_token（JWT，3小时有效）。
+  // access_token 登录 platform.sensenova.cn 后从浏览器 localStorage 的 access_token 项复制。
+  // account_id 从 JWT payload 的 ext.tenant_id 解码得到，无需用户手填。
+  // 余量为各模型 5 小时窗口剩余百分比，需独立查询函数（参考智谱 Coding Plan 模式）。
+  {id:'sensenova',name:'商汤 SenseNova',apiKey:'',endpoint:'https://platform.sensenova.cn/lite/console/v1/models',method:'GET',authType:'bearer',responseMapping:{}}
 ]
 
 var LABEL_MAP = {voucher:'代金券',cash:'现金',credit:'授信',chargeBalance:'充值余额',availableBalance:'可用余额',recharge:'充值',gift:'赠送',owed:'欠费',type:'类型',used:'已用',total:'总额',name:'用户',currency:'货币'}
@@ -299,6 +306,16 @@ function renderAll() {
       if (cpItems.length) cpRow = cpItems.join('')
     }
 
+    // 商汤各模型 5 小时窗口剩余百分比
+    var snRow = ''
+    if (c.sensenovaModels && c.sensenovaModels.length) {
+      var snItems = c.sensenovaModels.map(function(m) {
+        var cls = m.pct <= 0 ? 'high' : m.pct <= 20 ? 'warn' : 'ok'
+        return '<span class="detail-item"><span class="dl">' + esc(m.name) + ':</span> <span class="dv ' + cls + '">' + m.pct + '%</span></span>'
+      })
+      snRow = snItems.join('')
+    }
+
     var detailHtml = detailRows.join('')
 
     return '<div class="card" draggable="true" data-idx="' + idx + '" data-id="' + esc(c.id) + '">' +
@@ -317,7 +334,7 @@ function renderAll() {
         '</div>' +
       '</div>' +
       '<div class="card-row2">' +
-        ((detailHtml || cpRow) ? '<div class="card-row2-detail">' + detailHtml + cpRow + '</div>' : '') +
+        ((detailHtml || cpRow || snRow) ? '<div class="card-row2-detail">' + detailHtml + cpRow + snRow + '</div>' : '') +
         '<div class="card-btns">' +
           '<button class="btn-edit" onclick="event.stopPropagation();editOne(\'' + esc(c.id) + '\')">编辑</button>' +
           '<button class="btn-delete" onclick="event.stopPropagation();deleteOne(\'' + esc(c.id) + '\')">删除</button>' +
@@ -432,6 +449,10 @@ function refreshAll() {
 
   document.getElementById('refreshBar').classList.remove('hidden')
   var promises = active.map(function(p) {
+    // 商汤无单余额值，跳过标准 callApi（避免用"手机号|PIN"当 Bearer 触发 401），由 querySenseNovaUsage 填充
+    if (p.id === 'sensenova') {
+      return Promise.resolve({ id:p.id, name:p.name, status:'unknown', statusLabel:STATUS_MAP['unknown'], balanceText:'—', extraRows:[], lastUpdate:Date.now() })
+    }
     return callApi(p).then(function(data) { return buildCard(p, data) })
       .catch(function(e) { return { id:p.id, name:p.name, status:'error', statusLabel:'错误', balanceText:e.message||'失败', extraRows:[], lastUpdate:Date.now() } })
   })
@@ -444,6 +465,9 @@ function refreshAll() {
     for (var i = 0; i < cards.length; i++) {
       if (cards[i].id === 'zhipu') {
         cpPromises.push(queryZhipuCodingPlan(cards[i]))
+      }
+      if (cards[i].id === 'sensenova') {
+        cpPromises.push(querySenseNovaUsage(cards[i]))
       }
     }
     if (cpPromises.length) {
@@ -463,6 +487,16 @@ function refreshAll() {
 function refreshOne(id) {
   var p = findProv(id)
   if (!p) return
+  // 商汤无单余额值，跳过标准 callApi，直接 base card 由 querySenseNovaUsage 填充
+  if (id === 'sensenova') {
+    var snCard = { id:p.id, name:p.name, status:'unknown', statusLabel:STATUS_MAP['unknown'], balanceText:'—', extraRows:[], lastUpdate:Date.now() }
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].id === id) { cards.splice(i, 1, snCard); break }
+    }
+    save(); renderAll()
+    querySenseNovaUsage(snCard).then(function() { save(); renderAll() })
+    return
+  }
   callApi(p).then(function(data) {
     var card = buildCard(p, data)
     for (var i = 0; i < cards.length; i++) {
@@ -470,9 +504,12 @@ function refreshOne(id) {
     }
     save()
     renderAll()
-    // 智谱额外查询 Coding Plan
+    // 智谱额外查询 Coding Plan；商汤额外查询各模型余量
     if (id === 'zhipu') {
       queryZhipuCodingPlan(card).then(function() { save(); renderAll() })
+    }
+    if (id === 'sensenova') {
+      querySenseNovaUsage(card).then(function() { save(); renderAll() })
     }
   }).catch(function(e) { alert('刷新失败: ' + e.message) })
 }
@@ -527,6 +564,89 @@ function parseZhipuCpData(json) {
   return result
 }
 
+// ==================== 商汤 SenseNova 各模型余量 ====================
+// 从 access_token(JWT) 解码 tenant_id 作为 account_id，免用户手填
+function decodeJwtTenantId(token) {
+  try {
+    var parts = token.split('.')
+    if (parts.length < 2) return null
+    var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return (payload.ext && payload.ext.tenant_id) || null
+  } catch(e) { return null }
+}
+
+function querySenseNovaUsage(card) {
+  var p = findProv('sensenova')
+  if (!p || !p.apiKey || !p.apiKey.trim()) return Promise.resolve()
+  var key = p.apiKey.trim()
+  // 含 "|" 视为 "手机号|PIN" 自动登录（需代理 server.js）；否则当作 access_token 直用
+  var isAuto = key.indexOf('|') > 0
+  var authPromise
+  if (isAuto) {
+    if (!proxyUsable) {
+      card.sensenovaModels = null; card.status = 'error'; card.statusLabel = STATUS_MAP['error']
+      card.balanceText = '自动登录需代理（server.js）'
+      return Promise.resolve()
+    }
+    var sep = key.indexOf('|')
+    var username = key.slice(0, sep), password = key.slice(sep + 1)
+    authPromise = fetch('/api/sensenova/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+      .then(function(d) {
+        if (!d.access_token) throw new Error(d.message || '登录失败')
+        return { token: d.access_token, tenantId: d.tenant_id }
+      })
+  } else {
+    var tid = decodeJwtTenantId(key)
+    if (!tid) {
+      card.sensenovaModels = null; card.status = 'error'; card.statusLabel = STATUS_MAP['error']; card.balanceText = 'token 格式无效'
+      return Promise.resolve()
+    }
+    authPromise = Promise.resolve({ token: key, tenantId: tid })
+  }
+  var authVal, tenantId
+  return authPromise.then(function(auth) {
+    authVal = 'Bearer ' + auth.token; tenantId = auth.tenantId
+    var modelsUrl = 'https://platform.sensenova.cn/lite/console/v1/models'
+    var modelsReq = proxyUsable
+      ? fetch('/api/proxy?url=' + encodeURIComponent(modelsUrl), { headers: { 'X-Auth': authVal } })
+      : fetch(modelsUrl, { headers: { 'Authorization': authVal, 'Accept': 'application/json' } })
+    return modelsReq.then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+  }).then(function(mj) {
+    var modelList = (mj && mj.models) || []
+    if (!modelList.length) { card.sensenovaModels = []; card.balanceText = '0 个模型'; return }
+    var qs = modelList.map(function(m) { return 'model_ids=' + encodeURIComponent(m) }).join('&')
+    var usageUrl = 'https://platform.sensenova.cn/lite/console/v1/user/coding-plan/usages?account_id=' + tenantId + '&' + qs
+    var usageReq = proxyUsable
+      ? fetch('/api/proxy?url=' + encodeURIComponent(usageUrl), { headers: { 'X-Auth': authVal } })
+      : fetch(usageUrl, { headers: { 'Authorization': authVal, 'Accept': 'application/json' } })
+    return usageReq.then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+      .then(function(uj) {
+        card.sensenovaModels = parseSenseNovaData(uj, modelList)
+        if (card.sensenovaModels.length) {
+          var minPct = Math.min.apply(null, card.sensenovaModels.map(function(m) { return m.pct }))
+          card.balanceText = card.sensenovaModels.length + ' 个模型·最低 ' + minPct + '%'
+          card.status = minPct < 20 ? 'low' : 'ok'
+          card.statusLabel = STATUS_MAP[card.status]
+        }
+      })
+  }).catch(function(e) {
+    card.sensenovaModels = null
+    card.status = 'error'; card.statusLabel = STATUS_MAP['error']
+    card.balanceText = String(e.message || e).indexOf('401') > -1 ? 'token 已失效' : '查询失败'
+  })
+}
+
+function parseSenseNovaData(json, modelList) {
+  if (!json || !json.model_remaining_percent) return []
+  var map = json.model_remaining_percent
+  return modelList.map(function(name) {
+    return { name: name, pct: Math.round((Number(map[name]) || 0) * 100) / 100 }
+  }).sort(function(a, b) { return a.pct - b.pct })  // 升序：余量低的排前，便于发现快用完的模型
+}
+
 function formatRemaining(ms) {
   if (ms <= 0) return '即将重置'
   var seconds = Math.floor(ms / 1000)
@@ -562,11 +682,12 @@ function buildCard(prov, raw) {
     }
   }
 
-  // 保留已有的 codingPlan 数据（避免余额查询结果覆盖 Coding Plan 数据）
+  // 保留已有的 codingPlan / sensenovaModels 数据（避免余额查询结果覆盖附加数据）
   var existingCard = cards.find(function(c) { return c.id === prov.id })
   var existingCp = existingCard ? existingCard.codingPlan : null
+  var existingSn = existingCard ? existingCard.sensenovaModels : null
 
-  return { id:prov.id, name:prov.name, status:status, statusLabel:STATUS_MAP[status], balanceText:display, extraRows:rows, lastUpdate:Date.now(), codingPlan: existingCp }
+  return { id:prov.id, name:prov.name, status:status, statusLabel:STATUS_MAP[status], balanceText:display, extraRows:rows, lastUpdate:Date.now(), codingPlan: existingCp, sensenovaModels: existingSn }
 }
 
 function getPath(obj, path) {
@@ -595,7 +716,8 @@ function openAdd() {
         '<span class="add-item-name">' + esc(t.name) + '</span>' +
       '</div>' +
       '<div class="add-key-area" id="keyarea-' + t.id + '">' +
-        '<input id="key-' + t.id + '" placeholder="API KEY" oninput="onAddInput(\'' + t.id + '\')">' +
+        '<input id="key-' + t.id + '" placeholder="' + (t.id === 'sensenova' ? '手机号|PIN 或 access_token' : 'API KEY') + '" oninput="onAddInput(\'' + t.id + '\')">' +
+        (t.id === 'sensenova' ? '<div class="add-key-hint">手机号|PIN 自动登录（需本地代理 server.js）；或粘贴登录后的 access_token</div>' : '') +
         (t.authType === 'hmac' ? '<input id="secret-' + t.id + '" placeholder="API Secret" oninput="onAddInput(\'' + t.id + '\')">' : '') +
       '</div></div>'
   }).join('')
@@ -700,7 +822,16 @@ function editOne(id) {
   document.getElementById('editTitle').textContent = '编辑 ' + p.name
   document.getElementById('editNameInput').value = p.name || ''
   document.getElementById('editEndpointInput').value = p.endpoint || ''
-  document.getElementById('editKeyInput').value = p.apiKey || ''
+  var keyInput = document.getElementById('editKeyInput')
+  keyInput.value = p.apiKey || ''
+  keyInput.placeholder = (id === 'sensenova' ? '手机号|PIN 或 access_token' : 'sk-...')
+  // 商汤查询走独立函数（硬编码 models/usages URL），endpoint 字段无意义，隐藏避免误导
+  var epLabel = document.querySelector('label[for="editEndpointInput"]')
+  var epInput = document.getElementById('editEndpointInput')
+  var hideEp = (id === 'sensenova')
+  if (epLabel) epLabel.style.display = hideEp ? 'none' : 'block'
+  epInput.style.display = hideEp ? 'none' : 'block'
+  document.getElementById('editKeyHint').style.display = hideEp ? 'block' : 'none'
   document.getElementById('editModal').classList.remove('hidden')
 
   var secretLabel = document.getElementById('editSecretLabel')
