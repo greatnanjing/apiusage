@@ -232,7 +232,7 @@ var proxyUsable = false
 
 // 探测：server.js 对无参数的 /api/proxy 返回 400；静态托管返回 404 或网络错误
 function detectProxy() {
-  return fetch('/api/proxy').then(function(r) {
+  return fetch('api/proxy').then(function(r) {
     proxyUsable = (r.status === 400)
   }).catch(function() {
     proxyUsable = false
@@ -242,7 +242,7 @@ function detectProxy() {
 function callApi(prov) {
   var authVal = 'Bearer ' + (prov.apiKey || '')
   var req = proxyUsable
-    ? fetch('/api/proxy?url=' + encodeURIComponent(prov.endpoint), {
+    ? fetch('api/proxy?url=' + encodeURIComponent(prov.endpoint), {
         method: prov.method || 'GET',
         headers: { 'X-Auth': authVal }
       })
@@ -522,7 +522,7 @@ function queryZhipuCodingPlan(card) {
   var CP_URL = 'https://open.bigmodel.cn/api/monitor/usage/quota/limit'
   // 直连模式下浏览器禁止设置 Accept-Language 头，但解析字段与语言无关，不受影响
   var req = proxyUsable
-    ? fetch('/api/proxy?url=' + encodeURIComponent(CP_URL), {
+    ? fetch('api/proxy?url=' + encodeURIComponent(CP_URL), {
         method: 'GET',
         headers: { 'X-Auth-Raw': p.apiKey, 'X-Accept-Lang': 'en-US,en' }
       })
@@ -590,7 +590,7 @@ function querySenseNovaUsage(card) {
     }
     var sep = key.indexOf('|')
     var username = key.slice(0, sep), password = key.slice(sep + 1)
-    authPromise = fetch('/api/sensenova/login', {
+    authPromise = fetch('api/sensenova/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: username, password: password })
     }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
@@ -611,7 +611,7 @@ function querySenseNovaUsage(card) {
     authVal = 'Bearer ' + auth.token; tenantId = auth.tenantId
     var modelsUrl = 'https://platform.sensenova.cn/lite/console/v1/models'
     var modelsReq = proxyUsable
-      ? fetch('/api/proxy?url=' + encodeURIComponent(modelsUrl), { headers: { 'X-Auth': authVal } })
+      ? fetch('api/proxy?url=' + encodeURIComponent(modelsUrl), { headers: { 'X-Auth': authVal } })
       : fetch(modelsUrl, { headers: { 'Authorization': authVal, 'Accept': 'application/json' } })
     return modelsReq.then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
   }).then(function(mj) {
@@ -620,7 +620,7 @@ function querySenseNovaUsage(card) {
     var qs = modelList.map(function(m) { return 'model_ids=' + encodeURIComponent(m) }).join('&')
     var usageUrl = 'https://platform.sensenova.cn/lite/console/v1/user/coding-plan/usages?account_id=' + tenantId + '&' + qs
     var usageReq = proxyUsable
-      ? fetch('/api/proxy?url=' + encodeURIComponent(usageUrl), { headers: { 'X-Auth': authVal } })
+      ? fetch('api/proxy?url=' + encodeURIComponent(usageUrl), { headers: { 'X-Auth': authVal } })
       : fetch(usageUrl, { headers: { 'Authorization': authVal, 'Accept': 'application/json' } })
     return usageReq.then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
       .then(function(uj) {
