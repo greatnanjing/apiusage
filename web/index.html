@@ -94,10 +94,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 /* 导入弹窗 */
 .import-panel{width:92%}
-.import-hint{font-size:14px;color:#aaa;padding:8px 18px 0;flex-shrink:0}
-.btn-tmpl{margin:8px 18px;padding:8px 14px;background:#e8f4fd;color:#4a90d9;border:none;border-radius:4px;font-size:13px;cursor:pointer;align-self:flex-start;flex-shrink:0}
-.import-textarea{flex:1;margin:0 18px 10px;border:1px solid #ddd;border-radius:4px;padding:12px;font-size:12px;font-family:monospace;resize:none;min-height:200px}
-.error-msg{display:none;font-size:13px;color:#e53935;padding:0 18px 8px}
+.import-hint{font-size:15px;color:#aaa;padding:8px 18px 0;flex-shrink:0}
+.btn-tmpl{margin:8px 18px;padding:9px 16px;background:#e8f4fd;color:#4a90d9;border:none;border-radius:4px;font-size:15px;cursor:pointer;align-self:flex-start;flex-shrink:0}
+.btn-clear{margin:8px 18px 8px 0;padding:9px 16px;background:#fff0f0;color:#e53935;border:1px solid #ffcdd2;border-radius:4px;font-size:15px;cursor:pointer;align-self:flex-start;flex-shrink:0}
+.import-textarea{flex:1;margin:0 18px 10px;border:1px solid #ddd;border-radius:4px;padding:12px;font-size:15px;font-family:monospace;resize:none;min-height:200px}
+.error-msg{display:none;font-size:15px;color:#e53935;padding:0 18px 8px}
 .error-msg.show{display:block}
 
 /* 编辑弹窗 */
@@ -167,7 +168,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <button class="btn-close" onclick="closePanel('importModal')">✕</button>
       </div>
       <div class="import-hint">修改 apiKey 后粘贴完整的 JSON</div>
-      <button class="btn-tmpl" onclick="loadTemplate()">📋 加载预置模板</button>
+      <div style="display:flex;gap:8px;margin:0 18px">
+        <button class="btn-tmpl" onclick="loadTemplate()">📋 加载预置模板</button>
+        <button class="btn-clear" onclick="clearImport()">🗑 清除</button>
+      </div>
       <textarea class="import-textarea" id="importTextarea"></textarea>
       <div class="error-msg" id="importError"></div>
       <div class="modal-footer">
@@ -791,14 +795,28 @@ function confirmAdd() {
 
 // ==================== Import ====================
 function openImport() {
-  var tpl = JSON.stringify({providers:TEMPLATES}, null, 2)
-  document.getElementById('importTextarea').value = tpl
+  document.getElementById('importTextarea').value = generateImportTemplate()
   document.getElementById('importError').classList.remove('show')
   document.getElementById('importModal').classList.remove('hidden')
 }
 
 function loadTemplate() {
-  document.getElementById('importTextarea').value = JSON.stringify({providers:TEMPLATES}, null, 2)
+  document.getElementById('importTextarea').value = generateImportTemplate()
+}
+
+function clearImport() {
+  document.getElementById('importTextarea').value = ''
+  document.getElementById('importError').classList.remove('show')
+}
+
+// 生成导入模板 JSON：基于 TEMPLATES，商汤补 account 字段提示用户填手机号
+function generateImportTemplate() {
+  var tpls = TEMPLATES.map(function(t) {
+    var copy = JSON.parse(JSON.stringify(t))
+    if (t.id === 'sensenova') copy.account = ''
+    return copy
+  })
+  return JSON.stringify({ providers: tpls }, null, 2)
 }
 
 function confirmImport() {
