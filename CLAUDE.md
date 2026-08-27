@@ -56,7 +56,7 @@ node web/server.js   # 启动 3456 端口：静态托管 web/ + /api/proxy CORS 
 ### 3. 鉴权规则
 
 - 前 8 家供应商：`Authorization: Bearer <apiKey>`。
-- **例外：智谱 Coding Plan 配额接口**（`open.bigmodel.cn/api/monitor/usage/quota/limit`）——apiKey **原样放入 Authorization（不加 Bearer 前缀）**，且需要 `Accept-Language: en-US,en`。响应里 `type==='TOKENS_LIMIT'` 的条目按 `unit` 区分窗口：`unit===3` → 5 小时，`unit===6` → 7 天。
+- **例外：智谱 Coding Plan 配额接口**（`open.bigmodel.cn/api/monitor/usage/quota/limit`）——apiKey **原样放入 Authorization（不加 Bearer 前缀）**，且需要 `Accept-Language: en-US,en`。响应里 `type==='TOKENS_LIMIT'`（正式包 token 配额）与 `type==='CREDIT_LIMIT'`（GLM-7days-trial 等体验包 credit 配额）的条目均按 `unit` 区分窗口：`unit===3` → 5 小时，`unit===6` → 7 天；同窗口两类并存时 TOKENS_LIMIT 优先。
 - **例外：商汤 SenseNova**——鉴权是 **OAuth2 JWT access_token**（非 API key），需走完整 OAuth2 PKCE + JWE(`RSA-OAEP`/`A256GCM` 加密密码) 登录 `iam.sensecoreapi.cn/iam/authn/v1/auth/nova/login` 拿取；token 3 小时有效，无 refresh_token。web 端 `server.js` 提供 `/api/sensenova/login` 端点自动登录（`senseNovaLogin`，按 username 缓存 token 3h）；前端 `querySenseNovaUsage` 支持「手机号\|PIN」自动登录与 access_token 手动两种模式。`account_id` 从 JWT payload 的 `ext.tenant_id` 解码，用户免填。
 
 ### 4. web 的 CORS 双模式（`index.html` 启动时自动选择）

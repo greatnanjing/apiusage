@@ -96,9 +96,12 @@ export function formatForDisplay(parsed) {
 /**
  * 解析智谱 Coding Plan 用量数据（与 web 版 parseZhipuCpData 一致）
  *
- * 接口返回的 data.limits 中，type 为 TOKENS_LIMIT 的条目：
- *   unit === 3 -> 5 小时窗口用量（fiveHour）
- *   unit === 6 -> 7 天窗口用量（weekly）
+ * 接口返回的 data.limits 中：
+ *   type === 'TOKENS_LIMIT'（正式包 token 配额）或
+ *   type === 'CREDIT_LIMIT'（GLM-7days-trial 等体验包 credit 配额）的条目：
+ *     unit === 3 -> 5 小时窗口用量（fiveHour）
+ *     unit === 6 -> 7 天窗口用量（weekly）
+ * 同窗口两类并存时 TOKENS_LIMIT 优先，CREDIT_LIMIT 仅在槽位为空时填入。
  *
  * @param {Object} json - 智谱 Coding Plan 接口的原始 JSON
  * @returns {null | {fiveHour?: {pct, remaining}, weekly?: {pct, remaining}}}
@@ -110,7 +113,9 @@ export function parseZhipuCpData(json) {
   const result = {}
   for (let i = 0; i < limits.length; i++) {
     const item = limits[i]
-    if (item.type !== 'TOKENS_LIMIT') continue
+    const isTokens = item.type === 'TOKENS_LIMIT'
+    const isCredit = item.type === 'CREDIT_LIMIT'
+    if (!isTokens && !isCredit) continue
     const pct = Number(item.percentage) || 0
     let remaining = ''
     if (item.nextResetTime) {
@@ -119,9 +124,9 @@ export function parseZhipuCpData(json) {
       remaining = formatRemaining(resetMs - Date.now())
     }
     if (item.unit === 3) {
-      result.fiveHour = { pct: pct, remaining: remaining }
+      if (isTokens || !result.fiveHour) result.fiveHour = { pct: pct, remaining: remaining }
     } else if (item.unit === 6) {
-      result.weekly = { pct: pct, remaining: remaining }
+      if (isTokens || !result.weekly) result.weekly = { pct: pct, remaining: remaining }
     }
   }
   return result

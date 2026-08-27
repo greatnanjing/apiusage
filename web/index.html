@@ -569,7 +569,10 @@ function parseZhipuCpData(json) {
   var result = {}
   for (var i = 0; i < limits.length; i++) {
     var item = limits[i]
-    if (item.type !== 'TOKENS_LIMIT') continue
+    // TOKENS_LIMIT：正式包 token 配额；CREDIT_LIMIT：GLM-7days-trial 等体验包 credit 配额
+    var isTokens = item.type === 'TOKENS_LIMIT'
+    var isCredit = item.type === 'CREDIT_LIMIT'
+    if (!isTokens && !isCredit) continue
     var pct = Number(item.percentage) || 0
     var remaining = ''
     if (item.nextResetTime) {
@@ -578,9 +581,9 @@ function parseZhipuCpData(json) {
       remaining = formatRemaining(resetMs - Date.now())
     }
     if (item.unit === 3) {
-      result.fiveHour = { pct: pct, remaining: remaining }
+      if (isTokens || !result.fiveHour) result.fiveHour = { pct: pct, remaining: remaining }
     } else if (item.unit === 6) {
-      result.weekly = { pct: pct, remaining: remaining }
+      if (isTokens || !result.weekly) result.weekly = { pct: pct, remaining: remaining }
     }
   }
   return result
